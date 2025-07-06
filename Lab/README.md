@@ -18,4 +18,4 @@ StabilisingFibre22042024: File for training
 
 test_StabilisingFibre11052024: File for testing trained models
 
-timestamp_properties: File sorting timestamps of testing data to properties like goal power, model the training was started with, and algorithm
+timestamp_properties: File sorting timestamps of trained models data to properties like goal power, model the training was started with, and algorithm
