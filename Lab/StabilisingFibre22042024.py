@@ -6,7 +6,7 @@ from CustomTensorboardCallback import *
 import Photodetector
 from pylablib.devices import Thorlabs
 import safe_exit
-from sb3_contrib import TQC
+from sb3_contrib import TQC, CrossQ
 
 
 def main():
@@ -81,6 +81,7 @@ def main():
     policy_kwargs = dict(n_critics=2, n_quantiles=25)  # new TQC model
     model = TQC("MlpPolicy", env, top_quantiles_to_drop_per_net=2, verbose=1, policy_kwargs=policy_kwargs,
                 tensorboard_log=env.logdir)
+    # model = CrossQ("MlpPolicy", env, tensorboard_log=env.logdir) #use this for CrossQ
     # model = SAC("MlpPolicy", env, verbose=1, tensorboard_log=env.logdir)  #use this for SAC
     num = 0
     """
@@ -121,10 +122,10 @@ def main():
     model.set_env(env)
     model.load_replay_buffer(old_replay_path, truncate_last_traj=True)
     """
-    # start training (for 100k training steps)
+    # start training (for 200k training steps)
 
     TIMESTEPS = 1000
-    for i in range(100):
+    for i in range(200):
         model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name="TQC",
                     callback=CustomTensorboardCallback(env))
         model.save(f"{env.models_dir}/{num + TIMESTEPS * (i + 1)}")

@@ -7,7 +7,7 @@ import os
 import safe_exit
 import time
 import pandas as pd
-from sb3_contrib import TQC
+from sb3_contrib import TQC, CrossQ
 
 def main():
     actxm1 = Thorlabs.KinesisMotor("26004585")
@@ -75,6 +75,22 @@ def main():
                     ["goal/reward_2024_04_22_betas_5_5_5_5_1_prefactor_10_100_100_alphas_0.9_0.5_0.5/"
                        "min_power_after_reset0.2/reset_power_fail0.05/reset_power_goal0.85/max_actioninsteps6000/"
                        "max_episode_steps30", 1714153135, 37000, 0.85]]
+    
+    # CrossQ agents
+    # model_list = [["goal/reward_2024_04_22_betas_5_5_5_5_1_prefactor_10_100_100_alphas_0.9_0.5_0.5/"
+    #                "min_power_after_reset0.2/reset_power_fail0.05/reset_power_goal0.9/max_actioninsteps6000/"
+    #                "max_episode_steps30", 1750325230, 113000, 0.9],
+    #                 ["goal/reward_2024_04_22_betas_5_5_5_5_1_prefactor_10_100_100_alphas_0.9_0.5_0.5/"
+    #                    "min_power_after_reset0.2/reset_power_fail0.05/reset_power_goal0.85/max_actioninsteps6000/"
+    #                    "max_episode_steps30", 1749908988, 34000, 0.85]]
+
+    # SAC agents
+    # model_list = [["goal/reward_2024_04_22_betas_5_5_5_5_1_prefactor_10_100_100_alphas_0.9_0.5_0.5/"
+    #                "min_power_after_reset0.2/reset_power_fail0.05/reset_power_goal0.9/max_actioninsteps6000/"
+    #                "max_episode_steps30", 1750687596, 122000, 0.9],
+    #               ["goal/reward_2024_04_22_betas_5_5_5_5_1_prefactor_10_100_100_alphas_0.9_0.5_0.5/"
+    #                "min_power_after_reset0.2/reset_power_fail0.05/reset_power_goal0.85/max_actioninsteps6000/"
+    #                "max_episode_steps30", 1714656374, 34000, 0.85]]
     i = 0
     for dir_names, timestamp, num, reset_power_goal in model_list:
         print(reset_power_fail, min_power_after_reset, reset_power_goal)
