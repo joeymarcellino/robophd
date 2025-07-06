@@ -1,7 +1,8 @@
 import os
 import pandas as pd
 import numpy as np
-savename = "algorithm85"
+goal_power = 0.8
+savename = "algorithm"+str(int(goal_power*100))
 
 files = os.listdir('./'+savename+'/') #insert folder path
 df_total = pd.DataFrame(data=None, index=None)
@@ -29,6 +30,10 @@ stats_df = df_total.groupby(['rounded_step', 'algorithm']).apply(std_combined).r
 
 stats_df["y_upper"] = stats_df["mean"]+2*stats_df["std"]
 stats_df["y_lower"] = stats_df["mean"]-2*stats_df["std"]
+stats_df["max_possible_return"] = 50*(np.exp(-1/6)+np.exp(0.92/goal_power))
+stats_df["mean_norm"] = stats_df["mean"]/stats_df["max_possible_return"]
+stats_df["y_upper_norm"] = stats_df["y_upper"]/stats_df["max_possible_return"]
+stats_df["y_lower_norm"] = stats_df["y_lower"]/stats_df["max_possible_return"]
 
 df_total.to_csv(savename+"_tests.csv")
 stats_df.to_csv(savename+"_stats.csv")
