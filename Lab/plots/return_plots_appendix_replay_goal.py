@@ -20,36 +20,36 @@ palette0 = dict({0.85: palette0[0], 0.86: palette0[1], 0.87: palette0[2], 0.88: 
 f, ax = plt.subplots(1, 4, figsize=(10, 3), gridspec_kw=dict(width_ratios=[3, 1, 3, 0.5]))
 
 ax[0].set_xlim(0, 60000)
+ax[0].set_ylim(-0.25, 1.1)
 
-
-ax[0] = sns.lineplot(data=df0, x="Step", y="mean", hue="goal_power", legend="full",
+ax[0] = sns.lineplot(data=df0, x="Step", y="mean_norm", hue="goal_power", legend="full",
                           palette=palette0, ax=ax[0])
 categories = df0['goal_power'].unique()
 for category in categories:
     subset = df0[df0['goal_power'] == category]
-    ax[0].fill_between(subset['Step'], subset['y_lower'], subset['y_upper'], alpha=0.2,
+    ax[0].fill_between(subset['Step'], subset['y_lower_norm'], subset['y_upper_norm'], alpha=0.2,
                          color=palette0[category])
 
 ax[0].set_xlabel("timesteps")
-ax[0].set_ylabel("return (smoothed)")
+ax[0].set_ylabel("normalized return (smoothed)")
 title0 = ax[0].set_title(r'\textbf{(a)}')
 title0.set_position(np.array([-0.15, 0.99]))
 orig_pos = ax[1].get_position(original=True)
 f.delaxes(ax[1])
-ax[0].legend(title="$P_{goal}$", bbox_to_anchor=(orig_pos.x0+0.58, orig_pos.y0+0.2))
+ax[0].legend(title="$P_{goal}$", bbox_to_anchor=(orig_pos.x0+0.56, orig_pos.y0+0.24))
 
 ax[2].set_xlim(0, 210000)
 
 
-ax[2] = sns.lineplot(data=df1, x="Step", y="mean", hue="goal_power_replay", legend=False,
+ax[2] = sns.lineplot(data=df1, x="Step", y="mean_norm", hue="goal_power_replay", legend=False,
                           palette=palette1, ax=ax[2])
 categories = df1['goal_power_replay'].unique()
 for category in categories:
     subset = df1[df1['goal_power_replay'] == category]
-    ax[2].fill_between(subset['Step'], subset['y_lower'], subset['y_upper'], alpha=0.2,
+    ax[2].fill_between(subset['Step'], subset['y_lower_norm'], subset['y_upper_norm'], alpha=0.2,
                          color=palette1[category])
 ax[2].set_xlabel("timesteps")
-ax[2].set_ylabel("return (smoothed)")
+ax[2].set_ylabel("normalized return (smoothed)")
 title2 = ax[2].set_title(r'\textbf{(b)}')
 ax[2].axvline(x=38000, color="black")
 ax[2].axvline(x=63000, color="black")

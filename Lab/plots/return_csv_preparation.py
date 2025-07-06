@@ -9,9 +9,11 @@ for file in files:
     file = file[:-4]
     goal_power, timestamp, alg = file.split('_')
     df["goal_power_alg"] = goal_power+"_"+alg
+    df["goal"] = float(goal_power)
     df["timestamp"] = timestamp
-    df["rounded_step"] = df["Step"]
+    df["rounded_step"] = df["Step"]/5
     df = df.round({"rounded_step": -2})
+    df["rounded_step"] = df["rounded_step"]*5
     df["smoothed_value"] = df["Value"].ewm(alpha=0.01).mean()
     df["std1"] = df["Value"].ewm(alpha=0.01).std()
     df["smoothed_value_squared_plus_std1_squared"] = (df["smoothed_value"].apply(lambda x: x**2)
@@ -26,10 +28,14 @@ def std_combined(group):
                   - mean_means**2)
     return pd.Series({"mean": mean_means, "std": std})
 
-stats_df = df_total.groupby(['rounded_step', 'goal_power_alg']).apply(std_combined).reset_index()
+stats_df = df_total.groupby(['rounded_step', 'goal_power_alg', 'goal']).apply(std_combined).reset_index()
 
 stats_df["y_upper"] = stats_df["mean"]+2*stats_df["std"]
 stats_df["y_lower"] = stats_df["mean"]-2*stats_df["std"]
+stats_df["max_possible_return"] = 50*(np.exp(-1/6)+np.exp(0.93/stats_df["goal"]))
+stats_df["mean_norm"] = stats_df["mean"]/stats_df["max_possible_return"]
+stats_df["y_upper_norm"] = stats_df["y_upper"]/stats_df["max_possible_return"]
+stats_df["y_lower_norm"] = stats_df["y_lower"]/stats_df["max_possible_return"]
 
 stats_df.to_csv("return_trainings_stats.csv")
 print(stats_df)

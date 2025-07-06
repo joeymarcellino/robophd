@@ -13,6 +13,7 @@ for file in files:
     goal_power, timestamp = file.split('_')
     df["smoothed_value"] = df["Value"].ewm(alpha=0.01).mean()
     df["std1"] = df["Value"].ewm(alpha=0.01).std()
+    df["goal"] = float(goal_power)
     df["smoothed_value_squared_plus_std1_squared"] = (df["smoothed_value"].apply(lambda x: x**2)
                                                       + df["std1"].apply(lambda x: x**2))
     df["timestamp"] = timestamp
@@ -38,16 +39,24 @@ def std_combined(group):
                   - mean_means**2)
     return pd.Series({"mean": mean_means, "std": std})
 
-stats_df = df_total.groupby(['Step', 'goal_power_replay']).apply(std_combined).reset_index()
+stats_df = df_total.groupby(['Step', 'goal_power_replay', 'goal']).apply(std_combined).reset_index()
 
 stats_df["y_upper"] = stats_df["mean"]+2*stats_df["std"]
 stats_df["y_lower"] = stats_df["mean"]-2*stats_df["std"]
+stats_df["max_possible_return"] = 50*(np.exp(-1/6)+np.exp(0.93/stats_df["goal"]))
+stats_df["mean_norm"] = stats_df["mean"]/stats_df["max_possible_return"]
+stats_df["y_upper_norm"] = stats_df["y_upper"]/stats_df["max_possible_return"]
+stats_df["y_lower_norm"] = stats_df["y_lower"]/stats_df["max_possible_return"]
 
 stats_df.to_csv("return_replay_buffer_stats.csv")
 print(stats_df)
-stats_df_without_replay = df_without_replay.groupby(['Step', 'goal_power_replay']).apply(std_combined).reset_index()
+stats_df_without_replay = df_without_replay.groupby(['Step', 'goal_power_replay', 'goal']).apply(std_combined).reset_index()
 
 stats_df_without_replay["y_upper"] = stats_df_without_replay["mean"]+2*stats_df_without_replay["std"]
 stats_df_without_replay["y_lower"] = stats_df_without_replay["mean"]-2*stats_df_without_replay["std"]
+stats_df_without_replay["max_possible_return"] = 50*(np.exp(-1/6)+np.exp(0.93/stats_df_without_replay["goal"]))
+stats_df_without_replay["mean_norm"] = stats_df_without_replay["mean"]/stats_df_without_replay["max_possible_return"]
+stats_df_without_replay["y_upper_norm"] = stats_df_without_replay["y_upper"]/stats_df_without_replay["max_possible_return"]
+stats_df_without_replay["y_lower_norm"] = stats_df_without_replay["y_lower"]/stats_df_without_replay["max_possible_return"]
 stats_df_without_replay["agent"] = "pretrain on lower goals"
 stats_df_without_replay.to_csv("return_replay_buffer_stats_without_replay.csv")
