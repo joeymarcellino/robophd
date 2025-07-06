@@ -2,9 +2,9 @@
 
 ./dead_zone/: includes files for characterization of dead-zone 
 
-./plots/: includes files for figures included in the paper
+./plots/: includes files for figures included in the paper of training and testing results (with those results)
 
-CustomTensorboardCallback: Callback for tensorboard
+CustomTensorboardCallback: Callback for tensorboard that tracks the actuator positions alongside the return and episode length
 
 EnvFibreGoal220424: gymnasium environment for fiber coupling
 
