@@ -1,5 +1,5 @@
 
-from sb3_contrib import TQC
+from sb3_contrib import TQC, CrossQ
 from Env_fiber_simulated_goal import *
 from CustomTensorboardCallback import *
 from stable_baselines3 import SAC, TD3, DDPG, PPO, A2C
@@ -82,7 +82,7 @@ def main():
                                   random_reset=True, dir_names=dir_names, save_replay=True)
     env.reset()
     # compare algorithms
-    for algorithm, alg_descriptor in [[TQC, "TQC"], [SAC, "SAC"], [TD3, "TD3"], [DDPG, "DDPG"], [PPO, "PPO"], [A2C, "A2C"]]:
+    for algorithm, alg_descriptor in [[TQC, "TQC"], [SAC, "SAC"], [TD3, "TD3"], [DDPG, "DDPG"], [PPO, "PPO"], [A2C, "A2C"], [CrossQ, "CrossQ"]]:
         num = 0
         # new model depending on algorithm
         if alg_descriptor == "TQC":
