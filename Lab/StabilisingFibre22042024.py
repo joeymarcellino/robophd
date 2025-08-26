@@ -18,6 +18,31 @@ if devices_abs_path not in sys.path:
 
 from devices.steppermotor_ble import StepMo
 from devices.powermeter_pmodad5 import PmodAd5 
+from devices.liveplotter_heavy import LivePlotAgent
+
+#%%
+pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM0")
+plotter: LivePlotAgent = LivePlotAgent()
+
+#%%
+def get_data():
+    data = pds.get_measurement()[0]
+    
+    return np.array([data])
+
+plot_args ={
+            'refresh_interval': 0.1,
+            'title': "Live JSI Scan",
+            'xlabel': "Idler (nm)",
+            'ylabel': "Signal (nm)",
+            'no_plots': 1,
+            'plot_labels': None, 
+        }
+
+### data_func is a method that returns an array of arrays
+plotter.new_liveplot(data_func=get_data, kill_func = None, **plot_args)
+
+
 
 
 #%%
