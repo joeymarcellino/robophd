@@ -1,30 +1,35 @@
+#%%
 import time
 
 from stable_baselines3 import SAC
 from EnvFibreGoal220424 import *
 from CustomTensorboardCallback import *
-import Photodetector
-from pylablib.devices import Thorlabs
 import safe_exit
 from sb3_contrib import TQC, CrossQ
 
+import os 
+import sys 
+devices_relative_path = "../"
+file_abs_path = os.path.abspath(__file__)
+devices_abs_path = os.path.join(os.path.dirname(file_abs_path), devices_relative_path)
+
+if devices_abs_path not in sys.path:
+    sys.path.insert(0, devices_abs_path)
+
+from devices.steppermotor_ble import StepMo
+from devices.powermeter_pmodad5 import PmodAd5 
+
+
+#%%
 
 def main():
-    actxm1 = Thorlabs.KinesisMotor("26004585")
-    actym1 = Thorlabs.KinesisMotor("26004587")
-    actxm2 = Thorlabs.KinesisMotor("26003852")
-    actym2 = Thorlabs.KinesisMotor("26003794")
-    actuators = [actxm1, actym1, actxm2, actym2]
+    # enable pd after reset using sudo chmod 777 /dev/ttyACM0
+    pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM0")
+    actuators: StepMo = StepMo()
 
-    pd2 = Photodetector.Photodetector('USB0::0x1313::0x807B::1922851::0::INSTR')
-    pd1 = Photodetector.Photodetector('USB0::0x1313::0x807B::1922850::0::INSTR')  # reference
-    pd1.clear()  # this should solve the famous Visa Error.
-    pd2.clear()
-
-    pds = [pd1, pd2]
     max_actioninsteps = 6000
     reset_power_fail = 0.05
-    reset_power_goal = 0.9
+    reset_power_goal = 0.8
     min_power_after_reset = 0.2
     max_power_after_reset = reset_power_goal
     max_episode_steps = 30
@@ -32,8 +37,7 @@ def main():
     # close power meters when program is stopped or an error occurs
     @safe_exit.register
     def cleanup():
-        pd1.close()
-        pd2.close()
+        pds.close()
         print("cleanup called")
 
     # reward parameters
