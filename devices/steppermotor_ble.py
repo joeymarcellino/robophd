@@ -32,7 +32,7 @@ class StepMo(BLE_Client):
             self.motor_params = {
                 i: {'is_moving': False, 'last_direction': 0, 'steps': 0, 'backlash_steps': 0, 'pos': 0} for i in range(1, NUM_STEPPERS + 1)
             }
-            self.say_hello()
+            # self.say_hello()
 
 
         else:

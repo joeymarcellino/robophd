@@ -23,7 +23,7 @@ from devices.powermeter_pmodad5 import PmodAd5
 
 def main():
     # enable pd after reset using sudo chmod 777 /dev/ttyACM0
-    pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM0")
+    pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM1")
     actuators: StepMo = StepMo()
 
     max_actioninsteps = 6000
@@ -37,6 +37,7 @@ def main():
     @safe_exit.register
     def cleanup():
         pds.__exit__()
+        actuators.__exit__()
         print("cleanup called")
 
     # reward parameters

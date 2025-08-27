@@ -11,7 +11,7 @@ if devices_abs_path not in sys.path:
 from devices.powermeter_pmodad5 import PmodAd5 
 from devices.liveplotter_heavy import LivePlotAgent
 
-pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM1")
+pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM0")
 plotter: LivePlotAgent = LivePlotAgent()
 
 pds.bin_no = 100

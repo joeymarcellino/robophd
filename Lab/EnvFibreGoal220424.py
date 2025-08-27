@@ -288,7 +288,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
                 print(f'Actuator {i}: {add_random_steps} random steps moved.')
             for i in range(4):
                 self.actuators[i].wait_move()
-        self.actuator_positions = [self.actuators.motor_params[i]['pos'] for i in range(4)]
+        self.actuator_positions = [self.actuators.motor_params[i+1]['pos'] for i in range(4)]
         # observation:
         power = self.pds.get_measurement()[1][-1] / self.max_power
         self.observation = np.array([power])
