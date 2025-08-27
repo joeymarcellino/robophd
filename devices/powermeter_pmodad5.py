@@ -92,8 +92,16 @@ class PmodAd5():
     
     ### returns a dataframe of format [[ch1], [ch2]]
     ### This is to standardise with the generic instruments get_measurement method
+    '''
     def get_measurement(self):
         subframe = self.read_dataframe(self.bin_no)[:,:2]
+        return subframe.T
+    '''
+    def get_measurement(self):
+        arr = self.read_dataframe(self.bin_no)
+        if arr.ndim < 2 or arr.shape[0] == 0:
+            return np.zeros((2, 1))  # or whatever dummy shape you want
+        subframe = arr[:, :2]
         return subframe.T
 
     def get_ratio(self):
