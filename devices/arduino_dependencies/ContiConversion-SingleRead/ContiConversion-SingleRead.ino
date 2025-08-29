@@ -35,7 +35,7 @@ void setup() {
   AD7193.SetPGAGain(1);
   
   // Set the Averaging
-  AD7193.SetAveraging(40);
+  AD7193.SetAveraging(20);
 
   AD7193.SetSincFilter(1);
 

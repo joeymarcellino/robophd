@@ -16,8 +16,9 @@ devices_abs_path = os.path.join(os.path.dirname(file_abs_path), devices_relative
 if devices_abs_path not in sys.path:
     sys.path.insert(0, devices_abs_path)
 
-from devices.steppermotor_ble import StepMo, SelfLoggingStepper
+from devices.steppermotor_ble import StepMo
 from devices.powermeter_pmodad5 import PmodAd5 
+from devices.liveplotter_heavy import LivePlotAgent
 
 #%%
 
@@ -25,13 +26,33 @@ def main():
     # enable pd after reset using sudo chmod 777 /dev/ttyACM0
     log_dir = "/home/robophd/Documents/github/robophd/devices/"
     pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM0")
-    actuators: SelfLoggingStepper = SelfLoggingStepper(log_dir)
+    actuators: StepMo = StepMo(log_dir = log_dir)
+    liveplotter: LivePlotAgent = LivePlotAgent()
     for i in range(4):
-        action_sign = 1 if actuators.current_position[i] < 0 else 0
-        actuators.move_stepper_logged(i+1, action_sign, int(np.abs(actuators.current_position[i])))
+        direction = 1 if actuators.current_position[i] < 0 else 0
+        actuators.move_stepper(i+1, direction, int(np.abs(actuators.current_position[i])))
     print('Stepper positions reset')
 
-    max_actioninsteps = 1000
+    def get_data():
+        data = pds.get_measurement()
+        #np.append(data,data[1]/data[0]*100) # add relative power in %
+        return data
+
+    plot_args ={
+                'refresh_interval': 0.01,
+                'title': "Live Powermeter",
+                'xlabel': "Time (0.1s per bin)",
+                'ylabel': "Power (mW)",
+                'no_plots': 3,
+                'plot_labels': None,
+            }
+
+    ### data_func is a method that returns an array of arrays
+    liveplotter.new_liveplot(data_func=get_data, kill_func = None, **plot_args)
+
+
+
+    max_actioninsteps = 600
     reset_power_fail = 0.05
     reset_power_goal = 0.8
     min_power_after_reset = 0.2
@@ -42,7 +63,7 @@ def main():
     @safe_exit.register
     def cleanup():
         pds.__exit__()
-        actuators.__exit__()
+        actuators.close()
         print("cleanup called")
 
     # reward parameters

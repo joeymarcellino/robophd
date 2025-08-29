@@ -90,7 +90,7 @@ class PmodAd5():
             self.buffer_length = n 
             return np.array(self.buffer)
     
-    ### returns a dataframe of format [[ch1], [ch2]]
+    ### returns a dataframe of format [[ch1], [ch2], [ratio]]
     ### This is to standardise with the generic instruments get_measurement method
     '''
     def get_measurement(self):
@@ -100,8 +100,8 @@ class PmodAd5():
     def get_measurement(self):
         arr = self.read_dataframe(self.bin_no)
         if arr.ndim < 2 or arr.shape[0] == 0:
-            return np.zeros((2, 1)) 
-        subframe = arr[:, :2]
+            return np.zeros((3, 1)) 
+        subframe = arr[:, :3]
         return subframe.T
 
     def get_ratio(self):

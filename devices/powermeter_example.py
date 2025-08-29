@@ -20,7 +20,6 @@ pds.bin_no = 100
 def get_data():
     data = pds.get_measurement()
     #np.append(data,data[1]/data[0]*100) # add relative power in %
-    print(data)
     return data
 
 plot_args ={
@@ -34,5 +33,7 @@ plot_args ={
 
 ### data_func is a method that returns an array of arrays
 plotter.new_liveplot(data_func=get_data, kill_func = None, **plot_args)
+
+# %%
 
 # %%

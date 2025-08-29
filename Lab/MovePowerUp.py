@@ -44,8 +44,8 @@ def move_power_up(pds, actuators, max_power, start_dir, neutral_positions, min_p
                 power_old = power_new
                 rand = np.random.uniform(low=0.5, high=2.0)  # add some randomness to step size
                 movement = int(current_dir[i]*reset_step_size*rand)
-                action_sign = 1 if np.sign(movement) >= 0 else 0
-                actuators.move_stepper_logged(i+1, action_sign, int(np.abs(movement)))
+                direction = 1 if np.sign(movement) >= 0 else 0
+                actuators.move_stepper(i+1, direction, int(np.abs(movement)))
                 number_move_power_up_movements += 1
                 power_new = pds.get_measurement()[1][-1] / max_power
                 print(f'Power after moving: {power_new}')
@@ -53,8 +53,8 @@ def move_power_up(pds, actuators, max_power, start_dir, neutral_positions, min_p
                 if p_diff < -0.002:  # if power gets worse, reverse last action and change direction.
                     power_old = power_new
                     movement = -(int(current_dir[i] * reset_step_size * rand))
-                    action_sign = 1 if np.sign(movement) >= 0 else 0
-                    actuators.move_stepper_logged(i+1, action_sign, int(np.abs(movement)))
+                    direction = 1 if np.sign(movement) >= 0 else 0
+                    actuators.move_stepper(i+1, direction, int(np.abs(movement)))
                     number_move_power_up_movements += 1
                     # print('Reverse last action, then next actuator') # Commented 20/04
                     power_new = pds.get_measurement()[1][-1] / max_power
@@ -68,15 +68,15 @@ def move_power_up(pds, actuators, max_power, start_dir, neutral_positions, min_p
                     # that it had no impact at all.
                     rand = np.random.uniform(low=0.5, high=2.0)  # add some randomness to step size
                     movement = int(current_dir[i] * reset_step_size * rand)
-                    action_sign = 1 if np.sign(movement) >= 0 else 0
-                    actuators.move_stepper_logged(i+1, action_sign, int(np.abs(movement)))
+                    direction = 1 if np.sign(movement) >= 0 else 0
+                    actuators.move_stepper(i+1, direction, int(np.abs(movement)))
                     number_move_power_up_movements += 1
                     power_new = pds.get_measurement()[1][-1] / max_power
                     p_diff = power_new - power_old
                     if p_diff < -0.002:  # if power gets worse, reverse last action and change direction
                         movement = -(int(current_dir[i] * reset_step_size * rand))
-                        action_sign = [1 if np.sign(movement) >= 0 else 0]
-                        actuators.move_stepper_logged(i+1, action_sign, int(np.abs(movement)))
+                        direction = 1 if np.sign(movement) >= 0 else 0
+                        actuators.move_stepper(i+1, direction, int(np.abs(movement)))
                         number_move_power_up_movements += 1
                         power_new = pds.get_measurement()[1][-1] / max_power
                 if power_new >= min_power_after_reset:
@@ -90,13 +90,14 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
                   min_power_stop_random_steps):
     # move to neutral position
     number_movements = 0
-    print('Reverse to neutral positions.')
+    print('Reversing to neutral positions now.')
     for i in range(4):
-        current_pos = actuators.motor_params[i+1]['pos']
-        action_sign = 0 if np.sign(neutral_positions[i] - current_pos) < 0 else 1
-        actuators.move_stepper_logged(i+1, action_sign, int(np.abs(neutral_positions[i] - current_pos)))
+        current_pos = actuators.current_position[i]
+        direction = 0 if neutral_positions[i] - current_pos < 0 else 1
+        actuators.move_stepper(i+1, direction, int(np.abs(neutral_positions[i] - current_pos)))
         number_movements += 1
     power_new = pds.get_measurement()[1][-1] / max_power  # ADD!
+    print("done.")
     # do random steps if power (still) small
     if power_new < max_power_to_neutral:
         print("random steps")
@@ -104,8 +105,8 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
             for i in range(4):
                 add_random_steps = random.randint(- max_random_reset_step_low_power,
                                                   max_random_reset_step_low_power)
-                action_sign = 1 if np.sign(add_random_steps) >= 0 else 0
-                actuators.move_stepper_logged(i+1, action_sign, int(np.abs(add_random_steps)))
+                direction = 1 if np.sign(add_random_steps) >= 0 else 0
+                actuators.move_stepper(i+1, direction, int(np.abs(add_random_steps)))
                 number_movements += 1
             power_new = pds.get_measurement()[1][-1] / max_power
             print(f'round {j}, current power: {power_new}.')

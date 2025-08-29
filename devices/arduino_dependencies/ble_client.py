@@ -116,7 +116,7 @@ class BLE_Client:
             raise RuntimeError("Not connected to device. Call connect() first.")
         
         self.__run_coroutine__(self.__async_send_command__(command))
-        print(f"Sent: '{command}'")
+        #print(f"Sent: '{command}'")
         return True
     
     def is_connected(self):
