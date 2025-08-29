@@ -100,7 +100,7 @@ class PmodAd5():
     def get_measurement(self):
         arr = self.read_dataframe(self.bin_no)
         if arr.ndim < 2 or arr.shape[0] == 0:
-            return np.zeros((2, 1))  # or whatever dummy shape you want
+            return np.zeros((2, 1)) 
         subframe = arr[:, :2]
         return subframe.T
 

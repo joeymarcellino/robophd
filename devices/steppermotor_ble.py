@@ -1,8 +1,10 @@
 import asyncio
 from bleak import BleakClient, BleakScanner
 import sys
+import os
 import threading
 import time
+import numpy as np
 # Import the base BLE client class
 # Ensure the path is correct based on your project structure
 from arduino_dependencies.ble_client import BLE_Client
@@ -13,7 +15,8 @@ STATUS_UUID = "19B10002-E8F2-537E-4F6C-D104768A1214"
 
 NUM_STEPPERS = 4
 STEPS_PER_REVOLUTION = 1800 * 2
-TIME_PER_STEP_S = 0.001 * 2 # we times 2 as an upper bound
+TIME_PER_STEP_S = 0.001 * 2 # we times 2 as an upper bound (normal)
+#TIME_PER_STEP_S = .01 # too much for normal operation, testing charge drainage
 
 class StepMo(BLE_Client):
     """
@@ -41,7 +44,7 @@ class StepMo(BLE_Client):
 
     def __enter__(self):
         return self
-    
+
     def __exit__(self):
         self.disconnect()
 
@@ -60,7 +63,7 @@ class StepMo(BLE_Client):
             raise ValueError("Stepper number must be between 1 and {}".format(NUM_STEPPERS))
         if direction not in [0, 1]:
             raise ValueError("Direction must be 0 (backward) or 1 (forward)")
-        if not isinstance(steps, int) or steps <= 0:
+        if not isinstance(steps, int) or steps < 0:
             raise ValueError("Steps must be a positive integer")
         
         step_chunks = 100
@@ -112,3 +115,47 @@ if __name__ == '__main__':
     with StepMo() as sm:
         print('\n\n################# ENTERING StepMo AS  >>>>> sm <<<<<< ####################\n\n')
         import code; code.interact(local=locals())
+
+
+class SelfLoggingStepper(StepMo):
+    '''
+    A logging wrapper that inherits StepMo methods as a stepper driver
+    '''
+    def __init__(self, log_dir):
+        super().__init__()
+        self.log_dir = log_dir
+        self.current_position = self._load_position()
+        self._save_position()
+        os.makedirs(self.log_dir, exist_ok=True)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self):
+        self._save_position()
+        super().__exit__()
+
+    def _save_position(self):
+        # save position to file
+        with open(os.path.join(self.log_dir, f"stepper_position.txt"), "w") as f:
+            f.write(",".join(map(str, self.current_position)))
+
+    def _load_position(self):
+        # load position from file
+        try:
+            with open(os.path.join(self.log_dir, f"stepper_position.txt"), "r") as f:
+                return np.array([int(x) for x in f.read().strip().split(",")])
+        except FileNotFoundError:
+            return np.array([0,0,0,0])
+
+    def move_stepper_logged(self, stepper_number, direction, steps):
+        # move stepper and log position
+        self.move_stepper(stepper_number, direction, steps)
+        action_sign = 1 if direction == 1 else -1
+        self.current_position[stepper_number - 1] += steps * action_sign
+        self._save_position()
+
+    def set_position(self, stepper_number, position):
+        # set stepper position and log it
+        self.current_position[stepper_number - 1] = position
+        self._save_position()

@@ -7,3 +7,7 @@ sketchpad/*
 sketch/*
 /sketchpad
 sketchpad
+
+logs/
+models/
+replay/

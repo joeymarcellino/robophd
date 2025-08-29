@@ -1,6 +1,7 @@
 #%%
 import os 
 import sys 
+import numpy as np
 devices_relative_path = "../"
 file_abs_path = os.path.abspath(__file__)
 devices_abs_path = os.path.join(os.path.dirname(file_abs_path), devices_relative_path)
@@ -18,7 +19,8 @@ pds.bin_no = 100
 
 def get_data():
     data = pds.get_measurement()
-
+    #np.append(data,data[1]/data[0]*100) # add relative power in %
+    print(data)
     return data
 
 plot_args ={
@@ -26,7 +28,7 @@ plot_args ={
             'title': "Live Powermeter",
             'xlabel': "Time (0.1s per bin)",
             'ylabel': "Power (mW)",
-            'no_plots': 2,
+            'no_plots': 3,
             'plot_labels': None,
         }
 

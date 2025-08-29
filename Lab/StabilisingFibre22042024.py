@@ -16,17 +16,22 @@ devices_abs_path = os.path.join(os.path.dirname(file_abs_path), devices_relative
 if devices_abs_path not in sys.path:
     sys.path.insert(0, devices_abs_path)
 
-from devices.steppermotor_ble import StepMo
+from devices.steppermotor_ble import StepMo, SelfLoggingStepper
 from devices.powermeter_pmodad5 import PmodAd5 
 
 #%%
 
 def main():
     # enable pd after reset using sudo chmod 777 /dev/ttyACM0
-    pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM1")
-    actuators: StepMo = StepMo()
+    log_dir = "/home/robophd/Documents/github/robophd/devices/"
+    pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM0")
+    actuators: SelfLoggingStepper = SelfLoggingStepper(log_dir)
+    for i in range(4):
+        action_sign = 1 if actuators.current_position[i] < 0 else 0
+        actuators.move_stepper_logged(i+1, action_sign, int(np.abs(actuators.current_position[i])))
+    print('Stepper positions reset')
 
-    max_actioninsteps = 6000
+    max_actioninsteps = 1000
     reset_power_fail = 0.05
     reset_power_goal = 0.8
     min_power_after_reset = 0.2
@@ -84,7 +89,7 @@ def main():
     env.reset()
     policy_kwargs = dict(n_critics=2, n_quantiles=25)  # new TQC model
     model = TQC("MlpPolicy", env, top_quantiles_to_drop_per_net=2, verbose=1, policy_kwargs=policy_kwargs,
-                tensorboard_log=env.logdir)
+                tensorboard_log=env.logdir, device="cpu")  # use this for TQC
     # model = CrossQ("MlpPolicy", env, tensorboard_log=env.logdir) #use this for CrossQ
     # model = SAC("MlpPolicy", env, verbose=1, tensorboard_log=env.logdir)  #use this for SAC
     num = 0
