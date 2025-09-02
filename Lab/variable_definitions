@@ -1,0 +1,23 @@
+reset_power_fail: [if power is under this value after a cycle, reset and give negative reward]
+
+reset_power_goal: [if power is over this value after a cycle, reset and give positive reward]
+
+ref_pd_slope/intercept: [model maximum power attainable by agent as linear function of reference power with this slope and intercept]
+
+grad_ascent_step_size: [when resetting to min power using grad ascent, take steps of size .5*x < x <2*x n.b. we reset using gradient ascent first instead of just always resetting to neutral because we want our agent to learn a general strategy for alignment and not just the path from neutral position to maximum]
+
+min/max_power_after_reset: [when a reset is called with self.random_reset == True, if the power is greater than min, choose a random target power between min and max, move randomly until observed power is above target power]
+
+extra_random_step_magnitude: [when a reset is called with self.random_reset == True, finish reset procedure by moving each stepper a random amount in a random direction with magnitude x]
+
+max_power_to_neutral: [if power is below x + .05 after reversing last action (or every 10 episodes), move to neutral positions then flail around randomly if that doesn't get you back above x]
+
+min_power_stop_random_actions_neutral_failure: [if flailing due to neutral position reset not yielding sufficient power, stop flailing when power > x]
+
+neutral_flailing_step_magnitude: [when flailing due to neutral position reset not yielding sufficient power, flail with movements of size in [-x,x]]
+
+high_power_flailing_step_magnitude: [when flailing when power is high at random reset, flail with movements of size in [-x,x]]
+
+
+
+

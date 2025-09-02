@@ -58,6 +58,7 @@ class StepMo(BLE_Client):
     def close(self):
         self.__exit__(None, None, None)
         return 
+        
 
     def _save_position(self):
         # save position to file
@@ -115,7 +116,7 @@ class StepMo(BLE_Client):
             for i in range(0, steps, step_chunks):
                 chunk = min(step_chunks, steps - i)
                 self.send_command(f"stepper{stepper_num}_{direction}_{chunk}")
-                print(f"Moving stepper {stepper_num} {'forward' if direction == 1 else 'backward'} by {chunk} steps.")
+                #print(f"Moving stepper {stepper_num} {'forward' if direction == 1 else 'backward'} by {chunk} steps.")
 
                 action_sign = 1 if direction == 1 else -1
                 self.current_position[stepper_num - 1] += chunk * action_sign
@@ -123,6 +124,7 @@ class StepMo(BLE_Client):
                 self._save_position()   
 
                 time.sleep(time_chunks)
+            
             self.motor_params[stepper_num]['is_moving'] = False
 
         return

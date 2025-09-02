@@ -42,12 +42,12 @@ pd2.clear()
 
 pds = [pd1, pd2]
 max_actioninsteps = 6*10**3 # new value 27/03/24, before 1e4
-minmirrorintervalsteps = 3 * 10 ** 6
-maxmirrorintervalsteps = 7 * 10 ** 6
+mirror_pos_lower_bound = 3 * 10 ** 6
+mirror_pos_upper_bound = 7 * 10 ** 6
 wait_time_pd = 0
 min_ref_power = 3 * 10 ** (-4)
-power_multiplier = 2.363  # new values March 2024
-power_adder = (-1)* 5.653  * 10 ** (-6)
+ref_pd_slope = 2.363  # new values March 2024
+ref_pd_intercept = (-1)* 5.653  * 10 ** (-6)
 neutralxm1 = 5461300  # 5461333 changes to new neutral position
 neutralym1 = 5570600  # 5570560 changes to new neutral position
 neutralxm2 = 5461300  # 5461333 changes to new neutral position
@@ -55,16 +55,16 @@ neutralym2 = 5177300  # 5177344 changes to new neutral position
 neutral_positions = [neutralxm1, neutralym1, neutralxm2, neutralym2]
 reset_power_fail = 0.05  # 0.0009
 reset_power_goal = 0.9
-reset_step_size = 10 ** 3  # L: currently used for the (somewhat) gradient ascent
+grad_ascent_step_size = 10 ** 3  # L: currently used for the (somewhat) gradient ascent
 min_power_after_reset = 0.2  # 0.001
 max_power_after_reset = reset_power_goal
-max_random_reset_step = 10 ** 3  min_actioninsteps = 1
+extra_random_step_magnitude = 10 ** 3  min_actioninsteps = 1
 max_power_to_neutral = 0.04
 
-number_of_random_steps_low_power = 10
-min_power_stop_random_steps = 0.04
-max_random_reset_step_low_power = 1e4 
-max_random_reset_step_high_power = 1e4 
+number_of_random_actions_low_power = 10
+min_power_stop_random_actions_neutral_failure = 0.04
+neutral_flailing_step_magnitude = 1e4 
+high_power_flailing_step_magnitude = 1e4 
 
 
 @safe_exit.register
@@ -89,18 +89,18 @@ reward_fct_descriptor_2024_04_22 = (
     f"_{beta_goal_1}_{beta_goal_2}_prefactor_{prefactor_step}_"
     f"{prefactor_fail}_{prefactor_goal}_alphas_{alpha_step}_{alpha_fail}_{alpha_goal}")
 
-def reward_fct_2024_04_22(avg_power, max_power, power, reset_power_fail, max_episode_steps,
+def reward_fct_2024_04_22(avg_power, max_power, power, reset_power_fail, max_cycles_per_episode,
                           reset_power_goal, min_power_after_reset, current_step):
     if power > reset_power_goal:
         reward = prefactor_goal * (
-                ((1 - alpha_goal) * np.exp(-beta_goal_1 * current_step / max_episode_steps))
+                ((1 - alpha_goal) * np.exp(-beta_goal_1 * current_step / max_cycles_per_episode))
                 + alpha_goal * np.exp(beta_goal_2 * power / reset_power_goal))
     elif power < reset_power_fail:
         reward = - prefactor_fail * (
-                (1 - alpha_fail) * np.exp(-beta_fail_1 * current_step / max_episode_steps)
+                (1 - alpha_fail) * np.exp(-beta_fail_1 * current_step / max_cycles_per_episode)
                 + alpha_fail * np.exp(-beta_fail_2 * power / reset_power_fail))
     else:
-        reward = prefactor_step / max_episode_steps * ((1 - alpha_step) * np.exp(
+        reward = prefactor_step / max_cycles_per_episode * ((1 - alpha_step) * np.exp(
             beta_step * (power - reset_power_goal)) + alpha_step * (power - min_power_after_reset))
     return reward
 
@@ -120,7 +120,7 @@ df.to_csv(save_name)
 env = Env_fiber_move_by_grad_reset(actuators, pds, max_actioninsteps, reset_power_fail, reset_power_goal,
                                                reward_fct_2024_04_22, reward_fct_descriptor_2024_04_22, min_power_after_reset,
                                                max_power_after_reset, timestamp=timestamp, dir_names=dir_names,
-                                               max_episode_steps=30)
+                                               max_cycles_per_episode=30)
 models_dir = env.models_dir
 model_path = models_dir + "/" + str(num) + ".zip"
 log_path = env.logdir

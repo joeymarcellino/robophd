@@ -27,7 +27,7 @@ def main():
     reset_power_goal = 0.9
     min_power_after_reset = 0.2  # 0.001
     max_power_after_reset = reset_power_goal
-    max_episode_steps = 30
+    max_cycles_per_episode = 30
 
     # close power meters when program is stopped or an error occurs
     @safe_exit.register
@@ -54,18 +54,18 @@ def main():
         f"{prefactor_fail}_{prefactor_goal}_alphas_{alpha_step}_{alpha_fail}_{alpha_goal}")
     dir_names = f"goal/pretrained_on_simulation/start_with_1715764610_500000"  # subdirectory to save models, logs,...
 
-    def reward_fct_2024_04_22(avg_power, max_power, power, reset_power_fail, max_episode_steps,
+    def reward_fct_2024_04_22(avg_power, max_power, power, reset_power_fail, max_cycles_per_episode,
                                   reset_power_goal, min_power_after_reset, current_step):
         if power > reset_power_goal:
             reward = prefactor_goal * (
-                    ((1 - alpha_goal) * np.exp(-beta_goal_1 * current_step / max_episode_steps))
+                    ((1 - alpha_goal) * np.exp(-beta_goal_1 * current_step / max_cycles_per_episode))
                     + alpha_goal * np.exp(beta_goal_2 * power / reset_power_goal))
         elif power < reset_power_fail:
             reward = - prefactor_fail * (
-                    (1 - alpha_fail) * np.exp(-beta_fail_1 * current_step / max_episode_steps)
+                    (1 - alpha_fail) * np.exp(-beta_fail_1 * current_step / max_cycles_per_episode)
                     + alpha_fail * np.exp(-beta_fail_2 * power / reset_power_fail))
         else:
-            reward = prefactor_step / max_episode_steps * ((1 - alpha_step) * np.exp(
+            reward = prefactor_step / max_cycles_per_episode * ((1 - alpha_step) * np.exp(
                 beta_step * (power - reset_power_goal)) + alpha_step * (power - min_power_after_reset))
         return reward
     # load model pretrained on virtual testbed
@@ -74,7 +74,7 @@ def main():
     env = Env_fiber_move_by_grad_reset(actuators, pds, max_actioninsteps, reset_power_fail, reset_power_goal,
                  reward_fct_2024_04_22, reward_fct_descriptor_2024_04_22, min_power_after_reset, max_power_after_reset,
                                        timestamp=timestamp, dir_names=dir_names, save_replay=True,
-                                       max_episode_steps=max_episode_steps)
+                                       max_cycles_per_episode=max_cycles_per_episode)
     env.reset()
     models_dir = "./simulation/models/A/1715764610"
     model_path = models_dir+"/"+str(num)
