@@ -19,16 +19,15 @@ const int Stepper4_Dir = 11;
 const int Stepper4_Step = 12;
 const int Stepper4_Enable = 13;
 
-int Stepper1_StepsPerRevolution = 1800 * 2; // 1800 for 100:1 with half microsteps
-int Stepper2_StepsPerRevolution = 1800 * 2; // 1800 for 100:1 with half microsteps
-int Stepper3_StepsPerRevolution = 1800 * 2; // 1800 for 100:1 with half microsteps
-int Stepper4_StepsPerRevolution = 1800 * 2; // 1800 for 100:1 with half microsteps
+int MicroStepping = 4;
+int Stepper1_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
+int Stepper2_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
+int Stepper3_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
+int Stepper4_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
 
-int numberOfSteps = 1800;
-int pulseWidthMicros = 20;  // microseconds
-int millisbetweenSteps = 1; // milliseconds - or try 1000 for slower steps
-
-
+int pulseWidthMicros = 50;  // microseconds
+int microsbetweenSteps = 1000; // microseconds - or try 1000 for slower steps
+int preStepDelay = 5000; //microseconds
 
 BLEService motorService(SERVICE_UUID);
 BLEStringCharacteristic commandCharacteristic(COMMAND_UUID, BLEWrite, 30);
@@ -77,7 +76,7 @@ void moveStepperMotor(int stepperNum, int direction, int steps) {
   
   // Move the appropriate stepper
   if (stepperNum <=4 && stepperNum >= 1) {
-    int dirPin, stepPin, enablePin;
+    int dirPin, stepPin, enablePin, totalSteps;
     
     // Assign pins based on stepper number
     switch (stepperNum) {
@@ -102,16 +101,19 @@ void moveStepperMotor(int stepperNum, int direction, int steps) {
         enablePin = Stepper4_Enable;
         break;
     }
+    // Apply microstepping scaling
+    totalSteps = steps * MicroStepping;
     // Set direction
     digitalWrite(dirPin, direction == 1 ? HIGH : LOW);
     // Enable the stepper
     digitalWrite(enablePin, HIGH);
+    delayMicroseconds(preStepDelay);
     // Move the stepper
-    for (int i = 0; i < steps; i++) {
+    for (int i = 0; i < totalSteps; i++) {
       digitalWrite(stepPin, HIGH);
       delayMicroseconds(pulseWidthMicros);
       digitalWrite(stepPin, LOW);
-      delay(millisbetweenSteps);
+      delayMicroseconds(microsbetweenSteps);
     }
     // Disable the stepper after moving
     digitalWrite(enablePin, LOW);

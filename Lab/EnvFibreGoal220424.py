@@ -19,6 +19,8 @@ class Env_fiber_move_by_grad_reset(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
 
+    #### CHANGE ARGUMENTS IN OTHER SCRIPT WHEN INSTANTIATING CLASS, NOT THE DEFAULTS 
+
     def __init__(self, actuators, pds, 
                  max_actioninsteps, 
                  reset_power_fail, reset_power_goal,
@@ -127,6 +129,9 @@ class Env_fiber_move_by_grad_reset(gym.Env):
         self.neutral_flailing_step_magnitude = neutral_flailing_step_magnitude
         self.high_power_flailing_step_magnitude = high_power_flailing_step_magnitude
 
+        self.reset_times = np.zeros(10)
+        self.reset_time_rolling_average = 0.
+        self.power_ratio = 0.
         #self.find_new_neutral_position = False
 
         # self.extra_threshold = extra_threshold # L: added
@@ -153,7 +158,52 @@ class Env_fiber_move_by_grad_reset(gym.Env):
         self.timestamp = timestamp
         self.df = pd.DataFrame(data=None, index=None, columns=["episode", "number_movements_reset", "time_reset"])
 
+    def check_new_neutral(self):
+        self.power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+        if self.power_ratio > self.min_power_after_reset + .1 and self.power_ratio < self.max_power_after_reset - .3:
+            for j in range(4):
+                self.neutral_positions[j] = self.actuators.motor_params[j + 1]['pos']
+            print("Found new neutral positions:", self.neutral_positions)
+        return self.neutral_positions
+
+
+    def random_flailing(self, step_magnitude):
+        number_movements = 0
+        for i in range(4):
+            add_random_steps = random.randint(- step_magnitude, step_magnitude)
+            direction = 1 if np.sign(add_random_steps) >= 0 else 0
+            self.actuators.move_stepper(i+1, direction, int(np.abs(add_random_steps)))
+            number_movements += 1
+            # the next episode will start even if these random steps move below min_power_after_reset.
+            # That's good, so we have different start conditions.
+            print(f'Actuator {i}: {add_random_steps} random steps moved.')
+
+        return number_movements
+     
+    def actuator_action(self, actioninsteps, reverse = False, check_new_neutral = False):
+
+        number_movements = 0
+        if not reverse:
+            sign = 1
+            printout = 'stepping motor'
+        else:
+            sign = -1
+            printout = 'reverse motor'
+
+        for i in range(4):
+            steps = sign * (actioninsteps[i])
+            direction = 1 if np.sign(steps) >= 0 else 0
+            self.actuators.move_stepper(i+1, direction, int(np.abs(steps)))
+            print(f'{printout} {i}: {steps}')
+            number_movements += 1
+            if check_new_neutral:
+                self.check_new_neutral()
+
+        return number_movements
+
     def step(self, action):
+
+        print('\n >>>>> Starting next Action <<<<< \n')
         how_long_ref_power_under_min_ref_power = 0
         # test if we have reference power. Otherwise, wait until we have (in case no laser beam gets to experiment)
         while self.pds.get_measurement()[0][-1] < self.min_ref_power:
@@ -178,14 +228,8 @@ class Env_fiber_move_by_grad_reset(gym.Env):
             if self.actioninsteps[i] + self.actuator_positions[i] <= self.mirror_pos_lower_bound:
                 self.actioninsteps[i] = self.mirror_pos_lower_bound - self.actuator_positions[i]
         # perform action
-        for i in range(4):
-            direction = 1 if np.sign(self.actioninsteps[i]) >= 0 else 0
-            self.actuators.move_stepper(i+1, direction, int(np.abs(self.actioninsteps[i])))
-            power = (self.pds.get_measurement()[1][-1]) / self.max_power
-            if power > self.min_power_after_reset and power < self.max_power_after_reset - .3:
-                for j in range (4):
-                    self.neutral_positions[j] = self.actuators.motor_params[j+1]['pos']
-            print("Found new neutral positions:", self.neutral_positions)
+        number_movements = self.actuator_action(self.actioninsteps, reverse = False, check_new_neutral = True)
+
         # get power from last second of measurement
         power_list = (self.pds.get_measurement()[1]) / self.max_power
         time.sleep(self.wait_time_pd)
@@ -197,12 +241,6 @@ class Env_fiber_move_by_grad_reset(gym.Env):
         power_ave = np.mean(power_array)
         power = power_list[-1]
 
-        ################## we re-zero all motors if find_new_neutral_position is True
-        if self.find_new_neutral_position and power > self.min_power_after_reset and power < self.max_power_after_reset:
-            for i in range (4):
-                self.neutral_positions[i] = self.actuators.motor_params[i+1]['pos']
-            self.find_new_neutral_position = False
-            print("Found new neutral positions:", self.neutral_positions)
         # normalise action for observation
         actionnormalized = self.actioninsteps / self.max_actioninsteps
 
@@ -222,21 +260,22 @@ class Env_fiber_move_by_grad_reset(gym.Env):
             self.terminated = True
             print(power, "goal reached")
             self.goal = True
-        # reset if agent reached max. episode length (truncated)
+        # reset if agent reached max. episode length (truncated) 
         if self.max_cycles_per_episode == self.episode_steps:
             self.truncated = True
-        # info
+        # info 
         self.info = {"episode_step": self.episode_steps, "act_1x_pos": self.actuator_positions[0], "act_1y_pos": self.actuator_positions[1],
                  "act_2x_pos": self.actuator_positions[2], "act_2y_pos": self.actuator_positions[3], "power": power}
         print(self.info)
         return self.observation, reward, self.terminated, self.truncated, self.info
 
     def reset(self, seed=None):
-        print('Reset called')
+        print( '\n >>>>> Reset called <<<<< \n')
+        start_time = time.time()
         super().reset(seed=seed)
         time_reset_start = time.time()
         self.episode_number += 1
-        number_reset_movements = 0  # number of movements performed during the reset
+        self.number_reset_movements = 0  # number of movements performed during the reset
         # test if reference powermeter has power, otherwise wait until it has
         how_long_ref_power_under_min_ref_power = 0
         while self.pds.get_measurement()[0][-1] < self.min_ref_power:
@@ -250,104 +289,93 @@ class Env_fiber_move_by_grad_reset(gym.Env):
         self.terminated = False
         self.truncated = False
         # move actuators for reset
+
         print(f'Resetting. Current action in steps: {self.actioninsteps}')  # L: added #not last?
         if self.random_reset:
-            power_old = self.pds.get_measurement()[1][-1] / self.max_power
-            print(f'Power when reset is called: {power_old}')
+            self.power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+            print(f'Power when reset is called: {self.power_ratio}')
             ###############
-            sgn_last_action = np.sign(self.actioninsteps)
             # first: reverse the last action if power < reset_power_fail
-            if power_old < self.reset_power_fail and not np.array_equal(self.actioninsteps, np.array([0, 0, 0, 0])):  # this should only be done if the reset is called because of low power.
-                for i in range(4):
-                    reverse_steps = (-1)*(self.actioninsteps[i])
-                    direction = 1 if np.sign(reverse_steps) >= 0 else 0
-                    self.actuators.move_stepper(i+1, direction, int(np.abs(reverse_steps)))
-                    print(f'reverse steps {i}: {reverse_steps}')
-                    number_reset_movements += 1
-                power_new = self.pds.get_measurement()[1][-1] / self.max_power
-                print(f'Power after reversing last action: {power_new}')
-                power_old = power_new
+            if self.power_ratio < self.reset_power_fail and not np.array_equal(self.actioninsteps, np.array([0, 0, 0, 0])):  # this should only be done if the reset is called because of low power.
+                number_movements = self.actuator_action(self.actioninsteps, reverse = True, check_new_neutral = False)
+                self.number_reset_movements += number_movements
+                self.power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+                print(f'Power after reversing last action: {self.power_ratio}')
+
             # second: move to neutral positions and do some random steps if power is very small or every ten episodes
-            if self.episode_number % 10 == 0 or power_old < self.max_power_to_neutral+0.05:
-                number_moves_to_neutral, power_new = to_neutral_positions_random_steps(self.pds, self.actuators,
+            if self.episode_number % 10 == 0 or self.power_ratio < self.max_power_to_neutral+0.05:
+                number_moves_to_neutral, power_ratio = to_neutral_positions_random_steps(self.pds, self.actuators,
                                                                                        self.max_power,
                                                                                        self.neutral_positions,
                                                                                        self.max_power_to_neutral,
                                                                                        self.number_of_random_actions_low_power,
                                                                                        self.neutral_flailing_step_magnitude,
                                                                                        self.min_power_stop_random_actions_neutral_failure)
-                number_reset_movements += number_moves_to_neutral
-                power_old = power_new
-                # if power_old < self.min_power_after_reset:
-                #     self.find_new_neutral_position = True
-                #     print("Power too low, finding new neutral positions...")
-            # third, if power now is high, choose a power randomly and do random steps until we are below that power
-            if power_old > self.min_power_after_reset:  # case where we have high powers when resetting
-                appr_reset_power = np.random.uniform(low=self.min_power_after_reset+0.1, high=self.max_power_after_reset)
-                print('want to have reset power < '+str(appr_reset_power))
-                power_new = power_old
-                while power_new > appr_reset_power:
-                    for i in range(4):
-                        add_random_steps = random.randint(- self.high_power_flailing_step_magnitude,
-                                                          self.high_power_flailing_step_magnitude)
-                        direction = 1 if np.sign(add_random_steps) >= 0 else 0
-                        self.actuators.move_stepper(i+1, direction, int(np.abs(add_random_steps)))
-                        number_reset_movements += 1
-                        # the next episode will start even if these random steps move below min_power_after_reset.
-                        # That's good, so we have different start conditions.
-                        print(f'Actuator {i}: {add_random_steps} random steps moved.')
-                    power_new = self.pds.get_measurement()[1][-1] / self.max_power
-                    print(f'Power after doing random steps: {power_new}')
-            # call grad_ascent (see case 2 paper, in the case of small power)
-            start_dir = (-1) * sgn_last_action
-            if np.array_equal(start_dir, np.array([0, 0, 0, 0])):
-                start_dir = np.array([(2*random.randint(0, 1) - 1) for _ in range(4)])
+                self.number_reset_movements += number_moves_to_neutral
+                self.power_ratio = power_ratio
 
-            number_grad_ascent_movements, power = grad_ascent(self.pds, self.actuators, self.max_power, start_dir, self.neutral_positions, self.min_power_after_reset,
-                          self.max_power_to_neutral, self.number_of_random_actions_low_power, self.neutral_flailing_step_magnitude,
-                          self.min_power_stop_random_actions_neutral_failure, self.grad_ascent_step_size, self.min_ref_power,
-                          self.wait_time_pd, self.ref_pd_slope, self.ref_pd_intercept)
-            number_reset_movements += number_grad_ascent_movements
+            # third, if power now is high, choose a power randomly and do random steps until we are below that power
+            if self.power_ratio > self.min_power_after_reset:  # case where we have high powers when resetting
+                appr_reset_power = np.random.uniform(low = self.min_power_after_reset+0.1, high = self.max_power_after_reset)
+                print('HIGH POWER PROTOCOL, we want to have reset power < '+str(appr_reset_power))
+                while self.power_ratio > appr_reset_power:
+                    number_movements = self.random_flailing(self.high_power_flailing_step_magnitude)
+                    self.number_reset_movements += number_movements
+                    self.check_new_neutral()
+            # call grad_ascent (see case 2 paper, in the case of small power)
+            ## we pass it the last actioninsteps as starting input as well
+            number_grad_ascent_movements, power_ratio = grad_ascent(self.pds, self.actuators, 
+                                                              self.max_power, self.actioninsteps, self.neutral_positions, self.min_power_after_reset,
+                                                              self.max_power_to_neutral,
+                                                              self.number_of_random_actions_low_power, 
+                                                              self.neutral_flailing_step_magnitude,
+                                                              self.min_power_stop_random_actions_neutral_failure, self.grad_ascent_step_size, self.min_ref_power,
+                                                              self.wait_time_pd, 
+                                                              self.ref_pd_slope, self.ref_pd_intercept)
+            self.number_reset_movements += number_grad_ascent_movements
+            self.power_ratio = power_ratio
             # update neutral positions if necessary
-            if power > self.min_power_after_reset and power < self.max_power_after_reset - .3:
-                for i in range (4):
-                    self.neutral_positions[i] = self.actuators.motor_params[i+1]['pos']
-                # self.find_new_neutral_position = False
-                print("Found new neutral positions:", self.neutral_positions)
-        # Do some random steps (to get some extra randomness...)
-        if self.random_reset:
-            for i in range(4):
-                add_random_steps = random.randint(- self.extra_random_step_magnitude, self.extra_random_step_magnitude)
-                direction = 1 if np.sign(add_random_steps) >= 0 else 0
-                self.actuators.move_stepper(i+1, direction, int(np.abs(add_random_steps)))
-                number_reset_movements += 1
-                # the next episode will start even if these random steps move below min_power_after_reset.
-                # That's good, so we have different start conditions.
-                print(f'Actuator {i}: {add_random_steps} random steps moved.')
-        self.actuator_positions = [self.actuators.motor_params[i+1]['pos'] for i in range(4)]
+            self.check_new_neutral()
+            # Do some random steps (to get some extra randomness...)
+            number_movements = self.random_flailing(self.extra_random_step_magnitude)
+            self.number_reset_movements += number_movements
+            self.check_new_neutral()
+
         # observation:
-        power = self.pds.get_measurement()[1][-1] / self.max_power
-        self.observation = np.array([power])
+        self.actuator_positions = [self.actuators.motor_params[i+1]['pos'] for i in range(4)]
+        self.power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+        self.observation = np.array([self.power_ratio])
         for i in range(self.number_obs_saved):
-            self.observation = np.append(self.observation, np.array([0.0, 0.0, 0.0, 0.0, power, power, 0.0, power]))
+            self.observation = np.append(self.observation, np.array([0.0, 0.0, 0.0, 0.0, self.power_ratio, self.power_ratio, 0.0, self.power_ratio]))
         # the [0, 0, 0, 0] corresponds to the fact that in the initial observation, before the first episode step
         # happens, there is no action
         # obs_t' for t'=t-(number_obs_saved+1) and act0_t', act1_t', act2_t', act3_t', average_power_t'-1_t',
         # max_power_t'-1_t', maxpos_t'-1_t', power_t' for t' = t,...,t-number_obs_saved
         # info
-        self.info = {"episode_step": self.episode_steps, "act_1y_pos": self.actuators.motor_params[1]['pos'],
-                "act_1x_pos": self.actuators.motor_params[2]['pos'],
-                "act_2y_pos": self.actuators.motor_params[3]['pos'], "act_2x_pos": self.actuators.motor_params[4]['pos'], "power": power}
+        self.info = {"episode_step": self.episode_steps, 
+                     "act_1y_pos": self.actuators.motor_params[1]['pos'],
+                     "act_1x_pos": self.actuators.motor_params[2]['pos'],
+                     "act_2y_pos": self.actuators.motor_params[3]['pos'], 
+                     "act_2x_pos": self.actuators.motor_params[4]['pos'], 
+                     "power": self.power_ratio}
+        
         print(self.info)
         time_reset_end = time.time()
         # save how long reset took
-        print(time_reset_end-time_reset_start, number_reset_movements)
+        print(time_reset_end-time_reset_start, self.number_reset_movements)
         self.df = self.df._append({"episode": self.episode_number,
-                                  "number_movements_reset": number_reset_movements,
+                                  "number_movements_reset": self.number_reset_movements,
                                   "time_reset":time_reset_end-time_reset_start}, ignore_index = True)
         self.df.to_csv(f"reset_time_{self.timestamp}.csv")
         self.goal = False
         self.fail = False
+
+        self.reset_times = np.roll(self.reset_times, -1)
+        self.reset_times[-1] = time.time()-start_time
+        self.reset_time_rolling_average = np.mean(self.reset_times)
+
+        print("\n >>>>> Reset finished! Took {:.3f}s <<<<< \n".format(self.reset_times[-1]))
+        print(" >>>>> Reset time rolling average: {:.3f}s <<<<< \n".format(self.reset_time_rolling_average))
         return self.observation, self.info  # reward, done can't be included
 
     def close(self):

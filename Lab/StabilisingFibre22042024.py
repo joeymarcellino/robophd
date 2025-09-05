@@ -28,10 +28,9 @@ def main():
     pds: PmodAd5 = PmodAd5(address = "/dev/ttyACM0")
     actuators: StepMo = StepMo(log_dir = log_dir)
     liveplotter: LivePlotAgent = LivePlotAgent()
-    for i in range(4):
-        direction = 1 if actuators.current_position[i] < 0 else 0
-        actuators.move_stepper(i+1, direction, int(np.abs(actuators.current_position[i])))
-    print('Stepper positions reset')
+    
+    actuators.zero_positions([1, 2, 3, 4])
+    print('Stepper positions re-zeroed to current positions')
 
     def get_data():
         data = pds.get_measurement()
@@ -52,8 +51,8 @@ def main():
 
 
 
-    max_actioninsteps = 250
-    reset_power_fail = 0.01
+    max_actioninsteps = 400
+    reset_power_fail = 0.05
     reset_power_goal = 0.8
     min_power_after_reset = 0.2
     max_power_after_reset = reset_power_goal
@@ -103,10 +102,29 @@ def main():
 
     # new model (comment this part out when using pretrained model)
     env = Env_fiber_move_by_grad_reset(actuators, pds, max_actioninsteps, reset_power_fail, reset_power_goal,
-                                       reward_fct_2024_04_22, reward_fct_descriptor_2024_04_22, min_power_after_reset,
-                                       max_power_after_reset,
-                                       high_power_flailing_step_magnitude=max_actioninsteps,
-                                       max_cycles_per_episode=max_cycles_per_episode, dir_names=dir_names)  # load environment
+                                       reward_fct_2024_04_22, reward_fct_descriptor_2024_04_22, 
+                                       min_power_after_reset, max_power_after_reset,
+                                       max_cycles_per_episode = max_cycles_per_episode, 
+                                       dir_names = dir_names, 
+                                       mirror_pos_lower_bound = -3 * 10 ** 5, mirror_pos_upper_bound = 3 * 10 ** 5,
+                                        ref_pd_intercept = 0, ref_pd_slope = 1,
+                                        min_ref_power = 1 * 10 ** (-1), 
+                                        grad_ascent_step_size = 5 * 10 ** 1,
+                                        extra_random_step_magnitude = 5 * 10 ** 1, 
+                                        min_actioninsteps = 1, max_power_to_neutral = 0.01,
+                                        number_of_random_actions_low_power = 10, 
+                                        min_power_stop_random_actions_neutral_failure = 0.04,
+                                        neutral_flailing_step_magnitude = int(200), high_power_flailing_step_magnitude = int(50),
+                                        wait_time_pd = 0, 
+                                        number_obs_saved = 4, 
+                                        timestamp = None,
+                                        random_reset = True, 
+                                        save_replay = True)
+
+
+
+
+
     env.reset()
     policy_kwargs = dict(n_critics=2, n_quantiles=25)  # new TQC model
     model = TQC("MlpPolicy", env, top_quantiles_to_drop_per_net=2, verbose=1, policy_kwargs=policy_kwargs,
@@ -155,7 +173,7 @@ def main():
     # start training (for 200k training steps)
 
     TIMESTEPS = 1000
-    for i in range(200):
+    for i in range(40):
         model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name="TQC",
                     callback=CustomTensorboardCallback(env))
         model.save(f"{env.models_dir}/{num + TIMESTEPS * (i + 1)}")

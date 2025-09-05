@@ -3,12 +3,17 @@ import random
 import warnings
 import time
 
-def grad_ascent(pds, actuators, max_power, start_dir, neutral_positions, min_power_after_reset,
+def grad_ascent(pds, actuators, max_power, actioninsteps, neutral_positions,      min_power_after_reset,
                   max_power_to_neutral, number_of_random_actions_low_power, neutral_flailing_step_magnitude,
                   min_power_stop_random_actions_neutral_failure, grad_ascent_step_size, min_ref_power, wait_time_pd,
                   ref_pd_slope, ref_pd_intercept):
     # with each act keep on moving in same direction while this moving helps (power_dif>0)
     # when this changes, change direction
+    sgn_last_action = np.sign(actioninsteps) ## actioninsteps being the last action taken in motor steps
+    start_dir = (-1) * sgn_last_action
+    if np.array_equal(start_dir, np.array([0, 0, 0, 0])):
+        start_dir = np.array([(2*random.randint(0, 1) - 1) for _ in range(4)])
+
     number_grad_ascent_movements = 0
     # test if reference powermeter has power, otherwise wait until it has
     how_long_ref_power_under_min_ref_power = 0
@@ -42,7 +47,7 @@ def grad_ascent(pds, actuators, max_power, start_dir, neutral_positions, min_pow
             # move in current direction while power gets better (each actuator individually)
             shuffled_list = random.sample(range(4), k=4)
             for i in shuffled_list:
-                print(f'Current actuator: {i}')
+                #print(f'Current actuator: {i}')
                 power_old = power_new
                 rand = np.random.uniform(low=0.5, high=2.0)  # add some randomness to step size
                 movement = int(current_dir[i]*grad_ascent_step_size*rand)
@@ -50,7 +55,7 @@ def grad_ascent(pds, actuators, max_power, start_dir, neutral_positions, min_pow
                 actuators.move_stepper(i+1, direction, int(np.abs(movement)))
                 number_grad_ascent_movements += 1
                 power_new = pds.get_measurement()[1][-1] / max_power
-                print(f'Power after moving: {power_new}')
+                # print(f'Power after moving: {power_new}')
                 p_diff = power_new - power_old
                 if p_diff < -0.002:  # if power gets worse, reverse last action and change direction.
                     power_old = power_new
@@ -99,7 +104,12 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
         actuators.move_stepper(i+1, direction, int(np.abs(neutral_positions[i] - current_pos)))
         number_movements += 1
     power_new = pds.get_measurement()[1][-1] / max_power  # ADD!
-    print("done.")
+    print(f"done. Power ratio is {power_new:.4f}")
+    # if power small, try moving each motor a fair amount in both directions, checking constantly for power
+    if power_new < max_power_to_neutral:
+        for i in range(4):
+            start_pos = actuators.current_position[i]
+            
     # do random steps if power (still) small
     if power_new < max_power_to_neutral:
         print("flailing neutral failure!!!")

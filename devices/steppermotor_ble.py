@@ -1,10 +1,12 @@
 import asyncio
+from token import NUMBER
 from bleak import BleakClient, BleakScanner
 import sys
 import os
 import threading
 import time
 import numpy as np
+import random 
 # Import the base BLE client class
 # Ensure the path is correct based on your project structure
 from arduino_dependencies.ble_client import BLE_Client
@@ -16,7 +18,22 @@ STATUS_UUID = "19B10002-E8F2-537E-4F6C-D104768A1214"
 NUM_STEPPERS = 4
 STEPS_PER_REVOLUTION = 1800 * 2
 TIME_PER_STEP_S = 0.001 * 2 # we times 2 as an upper bound (normal)
+MOVEMENT_LIMIT = 10000
+MINIMUM_STEPS = 5
 #TIME_PER_STEP_S = .01 # too much for normal operation, testing charge drainage
+
+
+### defined as [1to0, 0to1]
+BACKLASH = {1: [42, 40], 
+            2: [43, 41], 
+            3: [63, 62], 
+            4: [50, 50]}
+### defined as [1to1, 0to0]
+FRONTLASH = {1: [0, 0], 
+            2: [0, 0], 
+            3: [0, 4], 
+            4: [0, 0]}
+
 
 class StepMo(BLE_Client):
     """
@@ -40,7 +57,7 @@ class StepMo(BLE_Client):
         if self.connected:
             print("Connected to Stepper Motor Board")
             self.motor_params = {
-                i: {'is_moving': False, 'last_direction': 0, 'steps': 0, 'backlash_steps': 0, 'pos': self.current_position[i - 1]} for i in range(1, NUM_STEPPERS + 1)
+                i: {'is_moving': False, 'last_direction': 0, 'steps': 0, 'backlash': BACKLASH[i], 'frontlash': FRONTLASH[i], 'pos': self.current_position[i - 1]} for i in range(1, NUM_STEPPERS + 1)
             }
             # self.say_hello()
         else:
@@ -57,8 +74,17 @@ class StepMo(BLE_Client):
 
     def close(self):
         self.__exit__(None, None, None)
-        return 
-        
+        return
+
+    def zero_positions(self, stepper_numbers = [1, 2, 3, 4]):
+        for stepper_num in stepper_numbers:
+            if stepper_num in range(1, NUM_STEPPERS + 1):
+                self.current_position[stepper_num - 1] = 0
+                self.motor_params[stepper_num]['pos'] = 0
+            else:
+                raise ValueError("Stepper number must be between 1 and {}, but got {}".format(NUM_STEPPERS, stepper_num))
+        self._save_position()
+        return
 
     def _save_position(self):
         # save position to file
@@ -73,12 +99,22 @@ class StepMo(BLE_Client):
         except FileNotFoundError:
             return np.array([0,0,0,0])
 
+    def home_steppers(self, stepper_numbers = [1, 2, 3, 4]):
+        for stepper_num in stepper_numbers:
+            if stepper_num in range(1, NUM_STEPPERS + 1):
+                current_pos = self.current_position[stepper_num - 1]
+                direction = 1 if current_pos < 0 else 0
+                self.move_stepper(stepper_num, direction, int(np.abs(current_pos)))
+            else:
+                raise ValueError("Stepper number must be between 1 and {}, but got {}".format(NUM_STEPPERS, stepper_num))
+        return
+
     def set_position(self, stepper_number, position):
         # set stepper position and log it
         self.current_position[stepper_number - 1] = position
         self._save_position()
 
-    def move_stepper(self, stepper_num, direction, steps):
+    def move_stepper(self, stepper_num, direction, steps, verbose = False):
         """Convenience method to move a specific stepper motor.
         we standardise the command format as 'stepper{num}_{direction}_{steps}'
         
@@ -96,38 +132,101 @@ class StepMo(BLE_Client):
         if not isinstance(steps, int) or steps < 0:
             raise ValueError("Steps must be a positive integer, but got {}".format(steps))
 
-        step_chunks = 200
-        time_chunks = step_chunks * TIME_PER_STEP_S
         self.motor_params[stepper_num]['is_moving'] = True
+        last_direction = self.motor_params[stepper_num]['last_direction']
 
-        if steps < step_chunks:
-            self.send_command(f"stepper{stepper_num}_{direction}_{steps}")
-            print(f"Moving stepper {stepper_num} {'forward' if direction == 1 else 'backward'} by {steps} steps.")
+        if steps < MINIMUM_STEPS:
+            steps = 0
+
+        if last_direction != direction and steps > 0:
+            if last_direction - direction > 0:
+                lash = self.motor_params[stepper_num]['backlash'][0]
+            else: 
+                lash = self.motor_params[stepper_num]['backlash'][1]
+
+        elif last_direction == direction and steps > 0:
+            if direction == 1:
+                lash = self.motor_params[stepper_num]['frontlash'][0]
+            else:
+                lash = self.motor_params[stepper_num]['frontlash'][1]
+
+        if steps == 0: 
+            self.motor_params[stepper_num]['is_moving'] = False
+            self._save_position()            
+            return 
+
+        if steps < MOVEMENT_LIMIT:
+            self.send_command(f"stepper{stepper_num}_{direction}_{steps+lash}")
+            if verbose:
+                print(f"Moving stepper {stepper_num} {'forward' if direction == 1 else 'backward'} by {steps} steps.")
 
             action_sign = 1 if direction == 1 else -1
             self.current_position[stepper_num - 1] += steps * action_sign
             self.motor_params[stepper_num].update({'last_direction': direction, 'steps': steps, 'pos': self.current_position[stepper_num - 1]})
             self._save_position()            
 
-            time.sleep(steps * TIME_PER_STEP_S)
+            time.sleep((steps+lash) * TIME_PER_STEP_S)
             self.motor_params[stepper_num]['is_moving'] = False
+        
         else:
-            # Break the steps into chunks to avoid overwhelming the Arduino
-            for i in range(0, steps, step_chunks):
-                chunk = min(step_chunks, steps - i)
-                self.send_command(f"stepper{stepper_num}_{direction}_{chunk}")
-                #print(f"Moving stepper {stepper_num} {'forward' if direction == 1 else 'backward'} by {chunk} steps.")
-
-                action_sign = 1 if direction == 1 else -1
-                self.current_position[stepper_num - 1] += chunk * action_sign
-                self.motor_params[stepper_num].update({'last_direction': direction, 'steps': steps, 'pos': self.current_position[stepper_num - 1]})
-                self._save_position()   
-
-                time.sleep(time_chunks)
-            
-            self.motor_params[stepper_num]['is_moving'] = False
+            print(f"MOVEMENT TOO LARGE {steps}, MAKE IT LESS THAN {MOVEMENT_LIMIT}")
 
         return
+    
+    def backlash_test_3up3down(self, stepper_num, step_magnitude):
+
+        self.move_stepper(stepper_num, 0, 100)
+        self.move_stepper(stepper_num, 1, 100)
+        self.move_stepper(stepper_num, 1, step_magnitude)
+        self.move_stepper(stepper_num, 0, step_magnitude)
+        self.move_stepper(stepper_num, 0, step_magnitude)
+        self.move_stepper(stepper_num, 1, step_magnitude)
+        self.move_stepper(stepper_num, 1, step_magnitude)
+        self.move_stepper(stepper_num, 0, step_magnitude)
+
+        return
+
+    def frontlash_test_3up3down(self, stepper_num, step_magnitude):
+
+        self.move_stepper(stepper_num, 1, step_magnitude)
+        self.move_stepper(stepper_num, 1, step_magnitude)
+        self.move_stepper(stepper_num, 1, step_magnitude)
+        self.move_stepper(stepper_num, 0, step_magnitude)
+        self.move_stepper(stepper_num, 0, step_magnitude)
+        self.move_stepper(stepper_num, 0, step_magnitude)
+        return 
+    
+    def random_action_and_revert(self, steppers = [1,2,3,4],num_actions = 5, step_magnitude = 100):
+
+        print(f"Moving stepper motors randomly...in {num_actions} actions of max {step_magnitude} steps each")
+        net_displacement = np.zeros(len(steppers))
+        for i in range(len(steppers)):
+            displacement = 0
+            for q in range(num_actions):
+                direction = random.choice([0, 1])
+                sign = 1 if direction == 1 else -1
+                steps = random.randint(0, step_magnitude)
+                if steps < 5: 
+                    steps = 0
+                print(f"Moving stepper {steppers[i]} {'forward' if direction == 1 else 'backward'} by {steps} steps.")
+                self.move_stepper(steppers[i], direction, steps)
+                displacement += steps * sign
+
+            net_displacement[i] = displacement
+
+        time.sleep(0.5)
+        print("Reverting all positions!!")
+        for i in range(len(steppers)):
+            if net_displacement[i] != 0:
+                print(f"Reverting stepper {steppers[i]} {'forward' if net_displacement[i] < 0 else 'backward'} by {int(np.abs(net_displacement[i]))} steps.")
+                direction = 1 if net_displacement[i] < 0 else 0
+                self.move_stepper(steppers[i], direction, int(np.abs(net_displacement[i])))
+
+        print("Done.")
+
+        return 
+
+
 
     def say_hello(self):
         """A simple method to test the connection."""
