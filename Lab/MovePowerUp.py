@@ -108,22 +108,29 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
     # if power small, try moving each motor a fair amount in both directions, checking constantly for power
     if power_new < max_power_to_neutral:
         for i in range(4):
-            start_pos = actuators.current_position[i]
-            
-    # do random steps if power (still) small
+            for direction in [0,1]:
+                for j in range(100):
+                    actuators.move_stepper(i+1, direction, 10)
+                    power_new = pds.get_measurement()[1][-1] / max_power
+                    if power_new > min_power_stop_random_actions_neutral_failure:
+                        print(f'p = {power_new} > min_power_stop_random_actions_neutral_failure.')
+                        return number_movements, power_new
+                actuators.move_stepper(i+1,-1*direction + 1, 1000)
+    # do random steps if power (still) small, checking for power as you go
     if power_new < max_power_to_neutral:
         print("flailing neutral failure!!!")
         for j in range(number_of_random_actions_low_power):
+            print(f'round {j}, current power: {power_new}.')
             for i in range(4):
                 add_random_steps = random.randint(- neutral_flailing_step_magnitude,
                                                   neutral_flailing_step_magnitude)
                 direction = 1 if np.sign(add_random_steps) >= 0 else 0
-                actuators.move_stepper(i+1, direction, int(np.abs(add_random_steps)))
+                for k in range(add_random_steps // 10):
+                    actuators.move_stepper(i+1, direction, 10)
+                    power_new = pds.get_measurement()[1][-1] / max_power
+                    if power_new > min_power_stop_random_actions_neutral_failure:
+                        print(f'p = {power_new} > min_power_stop_random_actions_neutral_failure.')
+                        return number_movements, power_new
                 number_movements += 1
-            power_new = pds.get_measurement()[1][-1] / max_power
-            print(f'round {j}, current power: {power_new}.')
-            if power_new > min_power_stop_random_actions_neutral_failure:
-                print(f'p = {power_new} > min_power_stop_random_actions_neutral_failure.')
-                break
     return number_movements, power_new
 
