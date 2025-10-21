@@ -297,13 +297,13 @@ class Env_fiber_move_by_grad_reset(gym.Env):
             ###############
             # first: reverse the last action if power < reset_power_fail
             if self.power_ratio < self.reset_power_fail and not np.array_equal(self.actioninsteps, np.array([0, 0, 0, 0])):  # this should only be done if the reset is called because of low power.
-                number_movements = self.actuator_action(self.actioninsteps, reverse = True, check_new_neutral = False)
+                number_movements = self.actuator_action(self.actioninsteps, reverse = True, check_new_neutral = True)
                 self.number_reset_movements += number_movements
                 self.power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
                 print(f'Power after reversing last action: {self.power_ratio}')
 
             # second: move to neutral positions and do some random steps if power is very small or every ten episodes
-            if self.episode_number % 10 == 0 or self.power_ratio < self.max_power_to_neutral+0.05:
+            if self.episode_number % 5 == 0 or self.power_ratio < self.max_power_to_neutral+0.05:
                 number_moves_to_neutral, power_ratio = to_neutral_positions_random_steps(self.pds, self.actuators,
                                                                                        self.max_power,
                                                                                        self.neutral_positions,
@@ -316,6 +316,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
 
             # third, if power now is high, choose a power randomly and do random steps until we are below that power
             if self.power_ratio > self.min_power_after_reset:  # case where we have high powers when resetting
+                self.check_new_neutral()
                 appr_reset_power = np.random.uniform(low = self.min_power_after_reset+0.1, high = self.max_power_after_reset)
                 print('HIGH POWER PROTOCOL, we want to have reset power < '+str(appr_reset_power))
                 while self.power_ratio > appr_reset_power:

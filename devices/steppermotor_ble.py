@@ -16,24 +16,35 @@ COMMAND_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 STATUS_UUID = "19B10002-E8F2-537E-4F6C-D104768A1214"
 
 NUM_STEPPERS = 4
-STEPS_PER_REVOLUTION = 1800 * 2
-TIME_PER_STEP_S = 0.001 * 2 # we times 2 as an upper bound (normal)
+STEPS_PER_REVOLUTION = 4096 
+TIME_PER_STEP_S = 0.001 * 1.7 # we times 2 as an upper bound (normal)
 MOVEMENT_LIMIT = 10000
 MINIMUM_STEPS = 5
 #TIME_PER_STEP_S = .01 # too much for normal operation, testing charge drainage
 
 
-### defined as [1to0, 0to1]
-BACKLASH = {1: [42, 40], 
-            2: [43, 41], 
-            3: [63, 62], 
-            4: [50, 50]}
+
 ### defined as [1to1, 0to0]
 FRONTLASH = {1: [0, 0], 
             2: [0, 0], 
-            3: [0, 4], 
+            3: [0, 0], 
             4: [0, 0]}
 
+### defined as [1to0, 0to1]
+BACKLASH = {1: [0, 0],
+            2: [0, 0], 
+            3: [0, 0], 
+            4: [0, 0]}
+
+BACKLASH = {1: [0, 0],
+            2: [0, 0], 
+            3: [0, 0], 
+            4: [0, 0]}
+
+LASH = {1: [0,0], 
+            2: [0,0], 
+            3: [0,0], 
+            4: [0,0]}
 
 class StepMo(BLE_Client):
     """
@@ -57,12 +68,13 @@ class StepMo(BLE_Client):
         if self.connected:
             print("Connected to Stepper Motor Board")
             self.motor_params = {
-                i: {'is_moving': False, 'last_direction': 0, 'steps': 0, 'backlash': BACKLASH[i], 'frontlash': FRONTLASH[i], 'pos': self.current_position[i - 1]} for i in range(1, NUM_STEPPERS + 1)
+                i: {'is_moving': False, 'last_direction': 1, 'steps': 0, 'backlash': BACKLASH[i], 'frontlash': FRONTLASH[i], 'lash': LASH[i], 'pos': self.current_position[i - 1]} for i in range(1, NUM_STEPPERS + 1)
             }
             # self.say_hello()
         else:
             print("Failed to connect to Stepper Motor Board")
             sys.exit(1)
+        
 
     def __enter__(self):
         return self
@@ -114,8 +126,58 @@ class StepMo(BLE_Client):
         self.current_position[stepper_number - 1] = position
         self._save_position()
 
+
+    def mvstp(self, stepper_num, direction, steps, verbose = False):
+        """Move stepper with a different backlash compensation method.
+        This method oversteps by a fixed amount and then corrects back to the desired position.
+        
+        """
+        overstep = 200
+        if steps < MINIMUM_STEPS:
+            steps = 0
+
+        if steps == 0: 
+            self.motor_params[stepper_num]['is_moving'] = False
+            self._save_position()            
+            return 
+
+        if steps < MOVEMENT_LIMIT:
+            
+
+            last_direction = self.motor_params[stepper_num]['last_direction']
+            if last_direction != direction and steps > 0:
+
+                self.send_command(f"stepper{stepper_num}_{direction}_{steps+overstep}")
+                if verbose:
+                    print(f"Moving stepper {stepper_num} {'forward' if direction == 1 else 'backward'} by {steps} steps.")
+                ## go backwards the overstep amount to compensate for overstepping
+                lash = self.motor_params[stepper_num]["lash"][1] if direction == 1 else self.motor_params[stepper_num]["lash"][0] 
+                self.send_command(f"stepper{stepper_num}_{0 if last_direction == 0 else 1}_{overstep + lash}")
+
+            elif last_direction == direction and steps > 0:
+                self.send_command(f"stepper{stepper_num}_{direction}_{steps}")
+                if verbose:
+                    print(f"Moving stepper {stepper_num} {'forward' if direction == 1 else 'backward'} by {steps} steps.")
+                lash = 0
+
+            action_sign = 1 if direction == 1 else -1
+            self.current_position[stepper_num - 1] += steps * action_sign
+            self.motor_params[stepper_num].update({'last_direction': last_direction, 'steps': steps, 'pos': self.current_position[stepper_num - 1]})
+            self._save_position()            
+
+            time.sleep((steps+lash) * TIME_PER_STEP_S)
+            self.motor_params[stepper_num]['is_moving'] = False
+        
+        else:
+            print(f"MOVEMENT TOO LARGE {steps}, MAKE IT LESS THAN {MOVEMENT_LIMIT}")
+
+        return
+
+
     def move_stepper(self, stepper_num, direction, steps, verbose = False):
-        """Convenience method to move a specific stepper motor.
+        """
+        Move stepper with set backlash compensation (don't intentionally overshoot).
+        Convenience method to move a specific stepper motor.
         we standardise the command format as 'stepper{num}_{direction}_{steps}'
         
         stepper_num: int, the stepper motor number (1 to NUM_STEPPERS)
@@ -175,25 +237,31 @@ class StepMo(BLE_Client):
     
     def backlash_test_3up3down(self, stepper_num, step_magnitude):
 
-        self.move_stepper(stepper_num, 0, 100)
-        self.move_stepper(stepper_num, 1, 100)
-        self.move_stepper(stepper_num, 1, step_magnitude)
-        self.move_stepper(stepper_num, 0, step_magnitude)
-        self.move_stepper(stepper_num, 0, step_magnitude)
-        self.move_stepper(stepper_num, 1, step_magnitude)
-        self.move_stepper(stepper_num, 1, step_magnitude)
-        self.move_stepper(stepper_num, 0, step_magnitude)
+        self.mvstp(stepper_num, 1, step_magnitude)
+        time.sleep(0.1)
+        self.mvstp(stepper_num, 0, step_magnitude)
+        time.sleep(0.1)
+        self.mvstp(stepper_num, 0, step_magnitude)
+        time.sleep(0.1)
+
+        self.mvstp(stepper_num, 1, step_magnitude)
+        time.sleep(0.1)
+
+        self.mvstp  (stepper_num, 1, step_magnitude)
+        time.sleep(0.1)
+
+        self.mvstp(stepper_num, 0, step_magnitude)
 
         return
 
-    def frontlash_test_3up3down(self, stepper_num, step_magnitude):
+    def frontlash_test(self, stepper_num, step_magnitude, num_actions = 3):
 
-        self.move_stepper(stepper_num, 1, step_magnitude)
-        self.move_stepper(stepper_num, 1, step_magnitude)
-        self.move_stepper(stepper_num, 1, step_magnitude)
-        self.move_stepper(stepper_num, 0, step_magnitude)
-        self.move_stepper(stepper_num, 0, step_magnitude)
-        self.move_stepper(stepper_num, 0, step_magnitude)
+
+
+        for i in range (num_actions):
+            self.move_stepper(stepper_num, 0, step_magnitude)
+        for i in range (num_actions):
+            self.move_stepper(stepper_num, 1, step_magnitude)
         return 
     
     def random_action_and_revert(self, steppers = [1,2,3,4],num_actions = 5, step_magnitude = 100):

@@ -109,13 +109,13 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
     if power_new < max_power_to_neutral:
         for i in range(4):
             for direction in [0,1]:
-                for j in range(100):
-                    actuators.move_stepper(i+1, direction, 10)
+                for j in range(10):
+                    actuators.move_stepper(i+1, direction, 50)
                     power_new = pds.get_measurement()[1][-1] / max_power
                     if power_new > min_power_stop_random_actions_neutral_failure:
                         print(f'p = {power_new} > min_power_stop_random_actions_neutral_failure.')
                         return number_movements, power_new
-                actuators.move_stepper(i+1,-1*direction + 1, 1000)
+                actuators.move_stepper(i+1,-1*direction + 1, 500)
     # do random steps if power (still) small, checking for power as you go
     if power_new < max_power_to_neutral:
         print("flailing neutral failure!!!")
@@ -125,8 +125,8 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
                 add_random_steps = random.randint(- neutral_flailing_step_magnitude,
                                                   neutral_flailing_step_magnitude)
                 direction = 1 if np.sign(add_random_steps) >= 0 else 0
-                for k in range(add_random_steps // 10):
-                    actuators.move_stepper(i+1, direction, 10)
+                for k in range(add_random_steps // 50):
+                    actuators.move_stepper(i+1, direction, 50)
                     power_new = pds.get_measurement()[1][-1] / max_power
                     if power_new > min_power_stop_random_actions_neutral_failure:
                         print(f'p = {power_new} > min_power_stop_random_actions_neutral_failure.')

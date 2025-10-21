@@ -19,15 +19,16 @@ const int Stepper4_Dir = 11;
 const int Stepper4_Step = 12;
 const int Stepper4_Enable = 13;
 
-int MicroStepping = 4;
-int Stepper1_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
-int Stepper2_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
-int Stepper3_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
-int Stepper4_StepsPerRevolution = 1800 * MicroStepping; // 1800 for 100:1 with half microsteps
+int MicroStepping = 1;
+int StepsPerRevolution = 4096;
+int Stepper1_StepsPerRevolution = StepsPerRevolution * MicroStepping; //  for 64:1
+int Stepper2_StepsPerRevolution = StepsPerRevolution * MicroStepping; //  for 64:1 
+int Stepper3_StepsPerRevolution = StepsPerRevolution * MicroStepping; //  for 64:1 
+int Stepper4_StepsPerRevolution = StepsPerRevolution * MicroStepping; //  for 64:1
 
 int pulseWidthMicros = 50;  // microseconds
-int microsbetweenSteps = 1000; // microseconds - or try 1000 for slower steps
-int preStepDelay = 5000; //microseconds
+int microsbetweenSteps = 1500; // microseconds 
+int preStepDelay = 50; //milliseconds
 
 BLEService motorService(SERVICE_UUID);
 BLEStringCharacteristic commandCharacteristic(COMMAND_UUID, BLEWrite, 30);
@@ -107,13 +108,15 @@ void moveStepperMotor(int stepperNum, int direction, int steps) {
     digitalWrite(dirPin, direction == 1 ? HIGH : LOW);
     // Enable the stepper
     digitalWrite(enablePin, HIGH);
-    delayMicroseconds(preStepDelay);
+    
+    delay(preStepDelay);
     // Move the stepper
     for (int i = 0; i < totalSteps; i++) {
       digitalWrite(stepPin, HIGH);
       delayMicroseconds(pulseWidthMicros);
       digitalWrite(stepPin, LOW);
       delayMicroseconds(microsbetweenSteps);
+
     }
     // Disable the stepper after moving
     digitalWrite(enablePin, LOW);

@@ -51,7 +51,7 @@ def main():
 
 
 
-    max_actioninsteps = 400
+    max_actioninsteps = 50
     reset_power_fail = 0.05
     reset_power_goal = 0.8
     min_power_after_reset = 0.2
@@ -109,12 +109,12 @@ def main():
                                        mirror_pos_lower_bound = -3 * 10 ** 5, mirror_pos_upper_bound = 3 * 10 ** 5,
                                         ref_pd_intercept = 0, ref_pd_slope = 1,
                                         min_ref_power = 1 * 10 ** (-1), 
-                                        grad_ascent_step_size = 5 * 10 ** 1,
-                                        extra_random_step_magnitude = 5 * 10 ** 1, 
+                                        grad_ascent_step_size = 25,
+                                        extra_random_step_magnitude = 25, 
                                         min_actioninsteps = 1, max_power_to_neutral = 0.01,
                                         number_of_random_actions_low_power = 10, 
                                         min_power_stop_random_actions_neutral_failure = 0.04,
-                                        neutral_flailing_step_magnitude = int(200), high_power_flailing_step_magnitude = int(50),
+                                        neutral_flailing_step_magnitude = int(200), high_power_flailing_step_magnitude = int(25),
                                         wait_time_pd = 0, 
                                         number_obs_saved = 4, 
                                         timestamp = None,
