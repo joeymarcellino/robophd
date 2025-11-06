@@ -19,6 +19,7 @@ pds.bin_no = 100
 
 def get_data():
     data = pds.get_measurement()
+    #data = np.roll(data,(2,0),0)
     #np.append(data,data[1]/data[0]*100) # add relative power in %
     return data
 

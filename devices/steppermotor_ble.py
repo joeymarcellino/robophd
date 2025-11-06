@@ -71,6 +71,8 @@ class StepMo(BLE_Client):
                 i: {'is_moving': False, 'last_direction': 1, 'steps': 0, 'backlash': BACKLASH[i], 'frontlash': FRONTLASH[i], 'lash': LASH[i], 'pos': self.current_position[i - 1]} for i in range(1, NUM_STEPPERS + 1)
             }
             # self.say_hello()
+            self.move_stepper = self.mvstp  # set default movement method
+
         else:
             print("Failed to connect to Stepper Motor Board")
             sys.exit(1)
@@ -127,7 +129,7 @@ class StepMo(BLE_Client):
         self._save_position()
 
 
-    def mvstp(self, stepper_num, direction, steps, verbose = False):
+    def move_stepper(self, stepper_num, direction, steps, verbose = False):
         """Move stepper with a different backlash compensation method.
         This method oversteps by a fixed amount and then corrects back to the desired position.
         
@@ -165,7 +167,7 @@ class StepMo(BLE_Client):
             self.motor_params[stepper_num].update({'last_direction': last_direction, 'steps': steps, 'pos': self.current_position[stepper_num - 1]})
             self._save_position()            
 
-            time.sleep((steps+lash) * TIME_PER_STEP_S)
+            time.sleep((steps+overstep+lash) * TIME_PER_STEP_S)
             self.motor_params[stepper_num]['is_moving'] = False
         
         else:
@@ -174,7 +176,7 @@ class StepMo(BLE_Client):
         return
 
 
-    def move_stepper(self, stepper_num, direction, steps, verbose = False):
+    def mvstp(self, stepper_num, direction, steps, verbose = False):
         """
         Move stepper with set backlash compensation (don't intentionally overshoot).
         Convenience method to move a specific stepper motor.

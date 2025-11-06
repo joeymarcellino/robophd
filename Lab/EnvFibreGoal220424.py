@@ -37,6 +37,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
                  min_power_stop_random_actions_neutral_failure=0.04,
                  neutral_flailing_step_magnitude=int(100), high_power_flailing_step_magnitude=int(50),
                  wait_time_pd=0, 
+                 time_wait_pd=0,
                  number_obs_saved=4, 
                  max_cycles_per_episode=20, 
                  timestamp=None,
@@ -83,6 +84,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
         :param int high_power_flailing_step_magnitude:  when we have a too high power in the reset step, this is the approximate stepsize
         with which we do random steps
         :param float wait_time_pd: time between pd measurements
+        :param float time_wait_pd: time to wait for pd measurements after moving actuators
         :param int number_obs_saved: number of time steps we save in observation
         :param int max_cycles_per_episode: the maximal number of cycles per episode. if it's reached, the episode is truncated
         and the reset function is called
@@ -108,6 +110,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
         self.mirror_pos_upper_bound = mirror_pos_upper_bound
         self.neutral_positions = neutral_positions
         self.wait_time_pd = wait_time_pd
+        self.time_wait_pd = time_wait_pd
         self.reset_power_fail = reset_power_fail
         self.reset_power_goal = reset_power_goal
         self.min_ref_power = min_ref_power
@@ -158,14 +161,15 @@ class Env_fiber_move_by_grad_reset(gym.Env):
         self.timestamp = timestamp
         self.df = pd.DataFrame(data=None, index=None, columns=["episode", "number_movements_reset", "time_reset"])
 
-    def check_new_neutral(self):
+    def check_new_neutral(self,threshold=None):
+        if threshold is None:
+            threshold = self.min_power_after_reset + .1
         self.power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
-        if self.power_ratio > self.min_power_after_reset + .1 and self.power_ratio < self.max_power_after_reset - .3:
+        if self.power_ratio > threshold and self.power_ratio < self.max_power_after_reset - .3:
             for j in range(4):
                 self.neutral_positions[j] = self.actuators.motor_params[j + 1]['pos']
             print("Found new neutral positions:", self.neutral_positions)
         return self.neutral_positions
-
 
     def random_flailing(self, step_magnitude):
         number_movements = 0
@@ -178,6 +182,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
             # That's good, so we have different start conditions.
             print(f'Actuator {i}: {add_random_steps} random steps moved.')
 
+        time.sleep(self.time_wait_pd)
         return number_movements
      
     def actuator_action(self, actioninsteps, reverse = False, check_new_neutral = False):
@@ -196,8 +201,10 @@ class Env_fiber_move_by_grad_reset(gym.Env):
             self.actuators.move_stepper(i+1, direction, int(np.abs(steps)))
             print(f'{printout} {i}: {steps}')
             number_movements += 1
-            if check_new_neutral:
-                self.check_new_neutral()
+
+        time.sleep(self.time_wait_pd)
+        if check_new_neutral:
+            self.check_new_neutral()
 
         return number_movements
 
@@ -229,7 +236,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
                 self.actioninsteps[i] = self.mirror_pos_lower_bound - self.actuator_positions[i]
         # perform action
         number_movements = self.actuator_action(self.actioninsteps, reverse = False, check_new_neutral = True)
-
+        time.sleep(self.time_wait_pd)
         # get power from last second of measurement
         power_list = (self.pds.get_measurement()[1]) / self.max_power
         time.sleep(self.wait_time_pd)
@@ -310,11 +317,13 @@ class Env_fiber_move_by_grad_reset(gym.Env):
                                                                                        self.max_power_to_neutral,
                                                                                        self.number_of_random_actions_low_power,
                                                                                        self.neutral_flailing_step_magnitude,
-                                                                                       self.min_power_stop_random_actions_neutral_failure)
+                                                                                       self.min_power_stop_random_actions_neutral_failure,
+                                                                                       self.time_wait_pd)
                 self.number_reset_movements += number_moves_to_neutral
                 self.power_ratio = power_ratio
 
             # third, if power now is high, choose a power randomly and do random steps until we are below that power
+            time.sleep(self.time_wait_pd)
             if self.power_ratio > self.min_power_after_reset:  # case where we have high powers when resetting
                 self.check_new_neutral()
                 appr_reset_power = np.random.uniform(low = self.min_power_after_reset+0.1, high = self.max_power_after_reset)
@@ -325,18 +334,55 @@ class Env_fiber_move_by_grad_reset(gym.Env):
                     self.check_new_neutral()
             # call grad_ascent (see case 2 paper, in the case of small power)
             ## we pass it the last actioninsteps as starting input as well
-            number_grad_ascent_movements, power_ratio = grad_ascent(self.pds, self.actuators, 
-                                                              self.max_power, self.actioninsteps, self.neutral_positions, self.min_power_after_reset,
-                                                              self.max_power_to_neutral,
-                                                              self.number_of_random_actions_low_power, 
-                                                              self.neutral_flailing_step_magnitude,
-                                                              self.min_power_stop_random_actions_neutral_failure, self.grad_ascent_step_size, self.min_ref_power,
-                                                              self.wait_time_pd, 
-                                                              self.ref_pd_slope, self.ref_pd_intercept)
-            self.number_reset_movements += number_grad_ascent_movements
-            self.power_ratio = power_ratio
+            # try simple grad ascent and scuffed beamwalking a couple of times first
+            if self.power_ratio < self.min_power_after_reset:
+                simple_grad_ascent(self.pds, self.actuators, move_increment=self.grad_ascent_step_size)
+                number_grad_ascent_movements = 0  # we don't count the movements inside simple_grad_ascent for now
+                power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+                self.power_ratio = power_ratio
+
+            self.check_new_neutral(threshold=self.min_power_after_reset)
+
+            if self.power_ratio > .001:
+                if self.power_ratio < self.min_power_after_reset:
+                    power_history = scuffed_beamwalking(self.actuators, 
+                                                        self.pds, 
+                                                        goal_power=self.min_power_after_reset, move_increment= self.grad_ascent_step_size+5)
+                    power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+                    self.power_ratio = power_ratio
+
+                self.check_new_neutral(threshold=self.min_power_after_reset)
+
+                if self.power_ratio < self.min_power_after_reset:
+                    simple_grad_ascent(self.pds, self.actuators, move_increment=self.grad_ascent_step_size)
+                    number_grad_ascent_movements = 0  # we don't count the movements inside simple_grad_ascent for now
+                    power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+                    self.power_ratio = power_ratio
+
+                self.check_new_neutral(threshold=self.min_power_after_reset)
+
+                if self.power_ratio < self.min_power_after_reset:
+                    power_history = scuffed_beamwalking(self.actuators, 
+                                                        self.pds, 
+                                                        goal_power=self.min_power_after_reset, move_increment= self.grad_ascent_step_size+5)
+                power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
+                self.power_ratio = power_ratio
+
+                self.check_new_neutral(threshold=self.min_power_after_reset)
+            
+            if self.power_ratio < self.min_power_after_reset:
+                number_grad_ascent_movements, power_ratio = grad_ascent(self.pds, self.actuators, 
+                                                                self.max_power, self.actioninsteps, self.neutral_positions, self.min_power_after_reset,
+                                                                self.max_power_to_neutral,
+                                                                self.number_of_random_actions_low_power, 
+                                                                self.neutral_flailing_step_magnitude,
+                                                                self.min_power_stop_random_actions_neutral_failure, 3*self.grad_ascent_step_size, self.min_ref_power,
+                                                                self.wait_time_pd,
+                                                                self.time_wait_pd, 
+                                                                self.ref_pd_slope, self.ref_pd_intercept)
+            
             # update neutral positions if necessary
-            self.check_new_neutral()
+            self.check_new_neutral(threshold=self.min_power_after_reset)
             # Do some random steps (to get some extra randomness...)
             number_movements = self.random_flailing(self.extra_random_step_magnitude)
             self.number_reset_movements += number_movements
