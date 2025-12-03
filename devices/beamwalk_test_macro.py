@@ -50,7 +50,7 @@ liveplotter.new_liveplot(data_func=get_data, kill_func = None, **plot_args)
 #%%
 max_power = pds.get_measurement()[0][-1]
 simple_grad_ascent(pds, actuators, move_increment=10)
-#power_history = scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment=10)
+power_history = scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10,fringe_min=.5)
 plt.plot(power_history)
 plt.show()
 actuators.close()

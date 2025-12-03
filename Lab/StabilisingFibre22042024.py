@@ -116,7 +116,7 @@ def main():
                                         min_power_stop_random_actions_neutral_failure = 0.04,
                                         neutral_flailing_step_magnitude = int(200), high_power_flailing_step_magnitude = int(25),
                                         wait_time_pd = 0.1, 
-                                        time_wait_pd = 0.2,
+                                        time_wait_pd = 0. 5,
                                         number_obs_saved = 4, 
                                         timestamp = None,
                                         random_reset = True, 

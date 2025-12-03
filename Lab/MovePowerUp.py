@@ -141,33 +141,42 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
                 number_movements += 1
     return number_movements, power_new
 
-def to_max_quantized(pds,actuators,i,direction,percent_change=.05,move_increment=10):
+def to_max_quantized(pds,actuators,i,direction,percent_change=.05,move_increment=10,power_history=[]):
     p0 = pds.get_measurement()[1][-1]
+    p_ref = pds.get_measurement()[0][-1]
+    if p0/p_ref < 0.01:
+        print('Power too low, aborting')
+        return
     p1 = p0
     moving = True
     while moving:
         while np.abs(p1 - p0)/p0 < percent_change: # move until the power changes by at least percent_change
             actuators.move_stepper(i,direction,move_increment)
-            time.sleep(0.2)
+            time.sleep(0.5)
             p1 = pds.get_measurement()[1][-1]
+            power_history.append(p1)
         if p1 < p0:
             moving = False
-    return
+        else: 
+            p0 = p1
+    return p0, p1, power_history
 
 def simple_grad_ascent(pds, actuators, move_increment=10):
     print('Starting simple gradient ascent...')
     for i in [1,2,3,4]:
         direction = 0
         start_power = pds.get_measurement()[1][-1]
+        p_ref = pds.get_measurement()[0][-1]
+        if start_power/p_ref < 0.01:
+            print('Power too low, aborting')
+            return
 
         p0 = start_power
         p1 = p0
 
-        input(f'press enter to move until power changes by 5%...')
-
-        while np.abs(p1 - p0)/p0 < .05: # move one direction until the power changes by at least 5%
+        while np.abs(p1 - p0)/p0 < .05: # move one direction until the power changes by at least %
             actuators.move_stepper(i,direction,move_increment)
-            time.sleep(0.2)
+            time.sleep(0.5)
             p1 = pds.get_measurement()[1][-1]
         
         if p1 < p0: # if it went down, reverse direction
@@ -175,306 +184,157 @@ def simple_grad_ascent(pds, actuators, move_increment=10):
             print('Power went down, reversing direction.')
             p0 = p1
 
-        input(f'press enter to move by another 5%...')
+        p0, p1, _ = to_max_quantized(pds,actuators,i,direction,percent_change=0.02,move_increment=move_increment)
 
-        while np.abs(p1 - p0)/p0 < .05: # move the other direction until the power changes by at least 5%
-            actuators.move_stepper(i,direction,move_increment)
-            time.sleep(0.2)
-            p1 = pds.get_measurement()[1][-1]
-
-        input(f'press enter to move to max...')
-
-        while p1 >= p0: # move to max-ish
-            actuators.move_stepper(i,direction,move_increment)
-            time.sleep(0.2)
-            p0 = p1
-            p1 = pds.get_measurement()[1][-1]
     return
 
 # implement crude beamwalking procedure to retrieve power for auto-aligner training
 
-def walk_one_fringe(actuators,pds,move_increment,s_1,s_2,s1_direction,s2_direction,power_history):
-    max_power = pds.get_measurement()[0][-1]
-    p0 = pds.get_measurement()[1][-1] / max_power
+def walk_one_fringe(actuators,pds,stepper1,stepper2,direction1,direction2,move_increment=10,fringe_min=0.5,power_history=[]):
+    p0 = pds.get_measurement()[1][-1]
+    p_ref = pds.get_measurement()[0][-1]
+    if p0/p_ref < 0.01:
+        print('Power too low, aborting')
+        return power_history
     p1 = p0
-    print(f'start power: {p0}')
-    input('press enter to move to 25% power...')
-    while p1 > .25*p0: # move to quarter of start position
-        actuators.move_stepper(s_1,s1_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
+    power_history.append(p0)
+    
+    # move stepper1 until power drops by fringe_min
+    while p1/p0 > fringe_min:
+        actuators.move_stepper(stepper1, direction1, move_increment)
+        time.sleep(0.5)
+        p1 = pds.get_measurement()[1][-1]
         power_history.append(p1)
+    
+    p0, p1, power_history = to_max_quantized(pds,actuators,stepper2,direction2,percent_change=0.02,move_increment=move_increment,power_history=power_history)
 
-    print(f'arrived at: {p1}')
-    input('press enter to retrieve power...')
-    p0 = p1
-    while p1 >= p0: # retrieve power
-        actuators.move_stepper(s_2,s2_direction,move_increment)
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
+    return power_history        
 
-    peak_power_0 = p0
+def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
+    # assume we've just done simple grad ascent
+    print('Starting scuffed beamwalking...')
+    power_history = []
+    
+    p0 = pds.get_measurement()[1][-1]
+    p_ref = pds.get_measurement()[0][-1]
+    if p0/p_ref < 0.01:
+        print('Power too low, aborting')
+        return power_history
+    p1 = p0
+    power_history.append(p0)
 
-    print(f'arrived at: {p1}')
-    input('press enter to move to 25% power...')
-    while p1 >.25*peak_power_0: # move past
-        actuators.move_stepper(s_2,s2_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
-        if p1 > peak_power_0:
-            peak_power_0 = p1
-        power_history.append(p1)
-
-    print(f'arrived at: {p1}')
-    input('press enter to retrieve power...')
-    p0 = p1
-    while p1 >= p0: # retrieve power
-        actuators.move_stepper(s_1,s1_direction,move_increment)
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    return power_history
-
-def scuffed_beamwalking(actuators,pds,goal_power,move_increment=10):
-    x_1 = 2
-    x_2 = 4
-    y_1 = 1
-    y_2 = 3
     x1_direction = 0
     x2_direction = 0
     y1_direction = 0
     y2_direction = 0
-    fail_power = .01*goal_power
 
-    power_history = []
+    x1 = 1
+    x2 = 3
+    y1 = 2
+    y2 = 4
 
-    max_power = pds.get_measurement()[0][-1]
-    start_power = pds.get_measurement()[1][-1] / max_power
-    power_history.append(start_power)
-
-    # beamwalk x dofs over one fringe to determine correct direction. assuming we started with simple gradient ascent and are at a local max.
-    p0 = start_power
-    p1 = p0
-    
-    while np.abs(p1 - p0) / p0 < .05: # move one direction until the power changes by at least 5%
-        actuators.move_stepper(x_1,x1_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-    
-    if p1 < p0: # if it went down, reverse direction and try again
-        x1_direction = 1 - x1_direction
-        print('Power went down, reversing x1 direction.')
-        p0 = p1
-
-    while np.abs(p1 - p0) / p0 < .05: # move until the power changes by at least 5%
-        actuators.move_stepper(x_1,x1_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
+    # turn x1 until power drops by 25%
+    while p1/p0 > 0.75:
+        actuators.move_stepper(x1, x1_direction, move_increment)
+        time.sleep(0.5)
+        p1 = pds.get_measurement()[1][-1]
         power_history.append(p1)
 
-    while p1 >= p0: # move to max-ish
-        actuators.move_stepper(x_1,x1_direction,move_increment)
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
+    start_power = p1
+
+    # find corresponding x2 direction
+    p0 = p1
+    while abs(p1 - p0)/p0 < 0.05:
+        actuators.move_stepper(x2, x2_direction, move_increment)
+        time.sleep(0.5)
+        p1 = pds.get_measurement()[1][-1]
         power_history.append(p1)
-    
-    peak_power_0 = p0 # record max
-    if peak_power_0 < fail_power:
-        print('Power too low, aborting beamwalking.')
-        return power_history
+    if p1 < p0:
+        x2_direction = 1
+    p0, p1, power_history = to_max_quantized(pds,actuators,x2,x2_direction,percent_change=0.02,move_increment=move_increment,power_history=power_history)
 
-    print(f'Initial peak power: {peak_power_0}')
-    if peak_power_0 >= goal_power:
-        return power_history
-
-    while p1 > .25*peak_power_0: # keep going to about a quarter of max
-        actuators.move_stepper(x_1,x1_direction,move_increment)
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
-        if p1 > peak_power_0:
-            peak_power_0 = p1
-        power_history.append(p1)
-
-    p0 = pds.get_measurement()[1][-1] / max_power
-    power_history.append(p0)
-    p1 = p0
-
-    while np.abs(p1 - p0) / p0 < .05: # move other dof one direction until the power changes by at least 5%
-        actuators.move_stepper(x_2,x2_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    if p1 < p0: # if it went down, reverse direction
-        print('Power went down, reversing x2 direction.')
-        x2_direction = 1 - x2_direction
-        p0 = p1
-
-    while np.abs(p1 - p0) / p0 < .05: # move until the power changes by at least 5%
-        actuators.move_stepper(x_2,x2_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    while p1 >= p0: # move to max-ish
-        actuators.move_stepper(x_2,x2_direction,move_increment)
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    peak_power_1 = p0 # record new max
-    print(f'Peak power after x fringe walk: {peak_power_1}')
-    if peak_power_1 >= goal_power:
-        return power_history
-
-    if peak_power_1 < peak_power_0: # if power went up, keep these directions, otherwise reverse them
+    # check if new power is better than start power, reverse directions if not
+    if p0 < start_power:
         x1_direction = 1 - x1_direction
         x2_direction = 1 - x2_direction
-    print(f'Final x directions: x1_direction={x1_direction}, x2_direction={x2_direction}')
-
-    # do same thing with y dofs
-    p0 = pds.get_measurement()[1][-1] / max_power
-    power_history.append(p0)
-    p1 = p0
-
-    while np.abs(p1 - p0) / p0 < .05: # move one direction until the power changes by at least 5%
-        actuators.move_stepper(y_1,y1_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    if p1 < p0: # if it went down, reverse direction
-        print('Power went down, reversing y1 direction.')
-        y1_direction = 1 - y1_direction
-        p0 = p1
-
-    while np.abs(p1 - p0) / p0 < .05: # move until the power changes by at least 5%
-        actuators.move_stepper(y_1,y1_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    while p1 >= p0: # move to max-ish
-        actuators.move_stepper(y_1,y1_direction,move_increment)
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
     
-    peak_power_0 = p0 # record max
-    print(f'Initial peak power after x walk: {peak_power_0}')
-    if peak_power_0 >= goal_power:
-        return power_history
-    
-    if peak_power_0 < fail_power:
-        print('Power too low, aborting beamwalking.')
-        return power_history
-
-    while p1 > .25*peak_power_0: # keep going to about a quarter of max
-        actuators.move_stepper(y_1,y1_direction,move_increment) 
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
-        if p1 > peak_power_0:
-            peak_power_0 = p1
+    # turn y1 until power drops by 25%
+    while p1/p0 > 0.75:
+        actuators.move_stepper(y1, y1_direction, move_increment)
+        time.sleep(0.5)
+        p1 = pds.get_measurement()[1][-1]
         power_history.append(p1)
 
-    p0 = pds.get_measurement()[1][-1] / max_power
-    power_history.append(p0)
-    p1 = p0
+    start_power = p1
 
-    while np.abs(p1 - p0) / p0 < .05: # move other dof one direction until the power changes by at least 5%
-        actuators.move_stepper(y_2,y2_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
+    # find corresponding y2 direction
+    p0 = p1
+    while abs(p1 - p0)/p0 < 0.05:
+        actuators.move_stepper(y2, y2_direction, move_increment)
+        time.sleep(0.5)
+        p1 = pds.get_measurement()[1][-1]
         power_history.append(p1)
+    if p1 < p0:
+        y2_direction = 1
+    p0, p1, power_history = to_max_quantized(pds,actuators,y2,y2_direction,percent_change=0.02,move_increment=move_increment,power_history=power_history)
 
-    if p1 < p0: # if it went down, reverse direction
-        print('Power went down, reversing y2 direction.')
-        y2_direction = 1 - y2_direction
-        p0 = p1
-
-    while np.abs(p1 - p0) / p0 < .05: # move until the power changes by at least 5%
-        actuators.move_stepper(x_1,x1_direction,move_increment)
-        time.sleep(0.2)
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    while p1 >= p0: # move to max-ish
-        actuators.move_stepper(y_2,y2_direction,move_increment)
-        time.sleep(0.2)
-        p0 = p1
-        p1 = pds.get_measurement()[1][-1] / max_power
-        power_history.append(p1)
-
-    peak_power_1 = p0 # record new max
-    print(f'Peak power after y fringe walk: {peak_power_1}')
-    
-    if peak_power_1 < peak_power_0: # if power went up, keep these directions, otherwise reverse them
+    # check if new power is better than start power, reverse directions if not
+    if p0 < start_power:
         y1_direction = 1 - y1_direction
         y2_direction = 1 - y2_direction
-    print(f'Final y directions: y1_direction={y1_direction}, y2_direction={y2_direction}')
 
-    # see if that got us enough power
-    if peak_power_1 >= goal_power:
+    if p0/p_ref >= goal_power:
+        print('Power restored, no walking necessary')
         return power_history
     
-    # if not, beamwalk each dof one fringe at a time
-    start_power = pds.get_measurement()[1][-1] / max_power
-    walking_x = True
-    walking_y = True
-    switched_x = 0
-    switched_y = 0
-    while 1 == 1:
-        print('Continuing beamwalking to try and reach goal power.')
-        if walking_x:
-            power_pre_walk = pds.get_measurement()[1][-1] / max_power
-            power_history = walk_one_fringe(actuators,pds,move_increment,x_1,x_2,x1_direction,x2_direction,power_history)
-            power_post_walk = pds.get_measurement()[1][-1] / max_power
-            power_history.append(power_post_walk)
-            if power_post_walk <= power_pre_walk:
-                print('No power increase after x fringe walk, reversing direction.')
-                x1_direction = 1 - x1_direction
-                x2_direction = 1 - x2_direction
-                switched_x += 1
-                if switched_x >=2:
-                    walking_x = False
-        if power_post_walk >= goal_power:
-            print('Power restored via beamwalking.')
+    walking = True
+    while walking:
+        p0 = pds.get_measurement()[1][-1]
+        power_history = walk_one_fringe(actuators,pds,x2,x1,x2_direction,x1_direction,move_increment=move_increment,fringe_min=.75,power_history=power_history)
+        p1 = pds.get_measurement()[1][-1]
+        if p1/p_ref >= goal_power:
+            walking = False
+            print('Goal power reached, stopping beamwalking.')
             return power_history
-        if power_post_walk <= .05*start_power:
-            print('Beamwalking failed.')
+        elif p1/p_ref < 0.01:
+            print('Power too low, aborting')
             return power_history
-        if walking_y:
-            power_pre_walk = pds.get_measurement()[1][-1] / max_power
-            power_history = walk_one_fringe(actuators,pds,move_increment,y_1,y_2,y1_direction,y2_direction,power_history)
-            power_post_walk = pds.get_measurement()[1][-1] / max_power
-            power_history.append(power_post_walk)
-            if power_post_walk <= power_pre_walk:
-                print('No power increase after y fringe walk, reversing direction.')
-                y1_direction = 1 - y1_direction
-                y2_direction = 1 - y2_direction
-                switched_y += 1
-                if switched_y >=2:
-                    walking_y = False
-        if power_post_walk >= goal_power:
-            print('Power restored via beamwalking.')
+        power_history = walk_one_fringe(actuators,pds,x1,x2,x1_direction,x2_direction,move_increment=move_increment,fringe_min=.75,power_history=power_history)
+        p1 = pds.get_measurement()[1][-1]
+        if p1/p_ref >= goal_power:
+            walking = False
+            print('Goal power reached, stopping beamwalking.')
             return power_history
-        if power_post_walk <= .05*start_power:
-            print('Beamwalking failed.')
+        elif p1/p_ref < 0.01:
+            print('Power too low, aborting')
             return power_history
-        if not walking_x and not walking_y:
-            print('This is as good as it gets, stopping.')
+    
+        if p1 < p0:
+            print('Power went down after x walk, reversing directions.')
+            x1_direction = 1 - x1_direction
+            x2_direction = 1 - x2_direction
+        
+        p0 = pds.get_measurement()[1][-1]
+        power_history = walk_one_fringe(actuators,pds,y2,y1,y2_direction,y1_direction,move_increment=move_increment,fringe_min=.75,power_history=power_history)
+        p1 = pds.get_measurement()[1][-1]
+        if p1/p_ref >= goal_power:
+            walking = False
+            print('Goal power reached, stopping beamwalking.')
             return power_history
-
-
-
-
+        elif p1/p_ref < 0.01:
+            print('Power too low, aborting')
+            return power_history
+        power_history = walk_one_fringe(actuators,pds,y1,y2,y1_direction,y2_direction,move_increment=move_increment,fringe_min=.75,power_history=power_history)
+        p1 = pds.get_measurement()[1][-1]
+        if p1/p_ref >= goal_power:
+            walking = False
+            print('Goal power reached, stopping beamwalking.')
+            return power_history
+        elif p1/p_ref < 0.01:
+            print('Power too low, aborting')
+            return power_history
+    
+        if p1 < p0:
+            print('Power went down after y walk, reversing directions.')
+            y1_direction = 1 - y1_direction
+            y2_direction = 1 - y2_direction
