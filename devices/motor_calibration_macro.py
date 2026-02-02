@@ -48,7 +48,7 @@ pds.bin_no = 100
 liveplotter.new_liveplot(data_func=get_data, kill_func = None, **plot_args)
 #%%
 
-steppers = [4]
+steppers = [1,2,3,4]
 max_actions = 10
 trials_per_run = 10
 max_step = 100

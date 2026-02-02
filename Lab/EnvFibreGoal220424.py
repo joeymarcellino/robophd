@@ -347,7 +347,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
                 if self.power_ratio < self.min_power_after_reset:
                     power_history = scuffed_beamwalking(self.actuators, 
                                                         self.pds, 
-                                                        goal_power=self.min_power_after_reset, move_increment= self.grad_ascent_step_size+5)
+                                                        goal_power=.5, move_increment= self.grad_ascent_step_size+5)
                     power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
                     self.power_ratio = power_ratio
 
@@ -364,7 +364,7 @@ class Env_fiber_move_by_grad_reset(gym.Env):
                 if self.power_ratio < self.min_power_after_reset:
                     power_history = scuffed_beamwalking(self.actuators, 
                                                         self.pds, 
-                                                        goal_power=self.min_power_after_reset, move_increment= self.grad_ascent_step_size+5)
+                                                        goal_power=.5, move_increment= self.grad_ascent_step_size+5)
                 power_ratio = self.pds.get_measurement()[1][-1] / self.max_power
                 self.power_ratio = power_ratio
 
@@ -427,6 +427,5 @@ class Env_fiber_move_by_grad_reset(gym.Env):
 
     def close(self):
         # close powermeters
-        for pd in self.pds:
-            pd.__exit__()
+        self.pds.__exit__()
 

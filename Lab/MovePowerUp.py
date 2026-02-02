@@ -144,9 +144,9 @@ def to_neutral_positions_random_steps(pds, actuators, max_power, neutral_positio
 def to_max_quantized(pds,actuators,i,direction,percent_change=.05,move_increment=10,power_history=[]):
     p0 = pds.get_measurement()[1][-1]
     p_ref = pds.get_measurement()[0][-1]
-    if p0/p_ref < 0.01:
+    if p0/p_ref < 0.005:
         print('Power too low, aborting')
-        return
+        return p0, p0, power_history
     p1 = p0
     moving = True
     while moving:
@@ -167,7 +167,7 @@ def simple_grad_ascent(pds, actuators, move_increment=10):
         direction = 0
         start_power = pds.get_measurement()[1][-1]
         p_ref = pds.get_measurement()[0][-1]
-        if start_power/p_ref < 0.01:
+        if start_power/p_ref < 0.005:
             print('Power too low, aborting')
             return
 
@@ -193,14 +193,14 @@ def simple_grad_ascent(pds, actuators, move_increment=10):
 def walk_one_fringe(actuators,pds,stepper1,stepper2,direction1,direction2,move_increment=10,fringe_min=0.5,power_history=[]):
     p0 = pds.get_measurement()[1][-1]
     p_ref = pds.get_measurement()[0][-1]
-    if p0/p_ref < 0.01:
+    if p0/p_ref < 0.005:
         print('Power too low, aborting')
         return power_history
     p1 = p0
     power_history.append(p0)
     
     # move stepper1 until power drops by fringe_min
-    while p1/p0 > fringe_min:
+    while p1/p0 > fringe_min and p1/p_ref > 0.02:
         actuators.move_stepper(stepper1, direction1, move_increment)
         time.sleep(0.5)
         p1 = pds.get_measurement()[1][-1]
@@ -210,14 +210,14 @@ def walk_one_fringe(actuators,pds,stepper1,stepper2,direction1,direction2,move_i
 
     return power_history        
 
-def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
+def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10,fringe_min=0.75):
     # assume we've just done simple grad ascent
     print('Starting scuffed beamwalking...')
     power_history = []
     
     p0 = pds.get_measurement()[1][-1]
     p_ref = pds.get_measurement()[0][-1]
-    if p0/p_ref < 0.01:
+    if p0/p_ref < 0.005:
         print('Power too low, aborting')
         return power_history
     p1 = p0
@@ -234,7 +234,7 @@ def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
     y2 = 4
 
     # turn x1 until power drops by 25%
-    while p1/p0 > 0.75:
+    while p1/p0 > 0.75 and p1/p_ref > 0.02:
         actuators.move_stepper(x1, x1_direction, move_increment)
         time.sleep(0.5)
         p1 = pds.get_measurement()[1][-1]
@@ -244,7 +244,7 @@ def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
 
     # find corresponding x2 direction
     p0 = p1
-    while abs(p1 - p0)/p0 < 0.05:
+    while abs(p1 - p0)/p0 < 0.05 and p1/p_ref > 0.02:
         actuators.move_stepper(x2, x2_direction, move_increment)
         time.sleep(0.5)
         p1 = pds.get_measurement()[1][-1]
@@ -259,7 +259,7 @@ def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
         x2_direction = 1 - x2_direction
     
     # turn y1 until power drops by 25%
-    while p1/p0 > 0.75:
+    while p1/p0 > 0.75 and p1/p_ref > 0.02:
         actuators.move_stepper(y1, y1_direction, move_increment)
         time.sleep(0.5)
         p1 = pds.get_measurement()[1][-1]
@@ -269,7 +269,7 @@ def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
 
     # find corresponding y2 direction
     p0 = p1
-    while abs(p1 - p0)/p0 < 0.05:
+    while abs(p1 - p0)/p0 < 0.05 and p1/p_ref > 0.02:
         actuators.move_stepper(y2, y2_direction, move_increment)
         time.sleep(0.5)
         p1 = pds.get_measurement()[1][-1]
@@ -290,22 +290,22 @@ def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
     walking = True
     while walking:
         p0 = pds.get_measurement()[1][-1]
-        power_history = walk_one_fringe(actuators,pds,x2,x1,x2_direction,x1_direction,move_increment=move_increment,fringe_min=.75,power_history=power_history)
+        power_history = walk_one_fringe(actuators,pds,x2,x1,x2_direction,x1_direction,move_increment=move_increment,fringe_min=fringe_min,power_history=power_history)
         p1 = pds.get_measurement()[1][-1]
         if p1/p_ref >= goal_power:
             walking = False
             print('Goal power reached, stopping beamwalking.')
             return power_history
-        elif p1/p_ref < 0.01:
+        elif p1/p_ref < 0.005:
             print('Power too low, aborting')
             return power_history
-        power_history = walk_one_fringe(actuators,pds,x1,x2,x1_direction,x2_direction,move_increment=move_increment,fringe_min=.75,power_history=power_history)
+        power_history = walk_one_fringe(actuators,pds,x1,x2,x1_direction,x2_direction,move_increment=move_increment,fringe_min=fringe_min,power_history=power_history)
         p1 = pds.get_measurement()[1][-1]
         if p1/p_ref >= goal_power:
             walking = False
             print('Goal power reached, stopping beamwalking.')
             return power_history
-        elif p1/p_ref < 0.01:
+        elif p1/p_ref < 0.005:
             print('Power too low, aborting')
             return power_history
     
@@ -321,7 +321,7 @@ def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
             walking = False
             print('Goal power reached, stopping beamwalking.')
             return power_history
-        elif p1/p_ref < 0.01:
+        elif p1/p_ref < 0.005:
             print('Power too low, aborting')
             return power_history
         power_history = walk_one_fringe(actuators,pds,y1,y2,y1_direction,y2_direction,move_increment=move_increment,fringe_min=.75,power_history=power_history)
@@ -330,7 +330,7 @@ def scuffed_beamwalking(actuators,pds,goal_power=0.8,move_increment= 10):
             walking = False
             print('Goal power reached, stopping beamwalking.')
             return power_history
-        elif p1/p_ref < 0.01:
+        elif p1/p_ref < 0.005:
             print('Power too low, aborting')
             return power_history
     

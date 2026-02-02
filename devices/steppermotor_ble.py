@@ -41,7 +41,7 @@ BACKLASH = {1: [0, 0],
             3: [0, 0], 
             4: [0, 0]}
 
-LASH = {1: [0,0], 
+LASH = {1: [3,3], 
             2: [0,0], 
             3: [0,0], 
             4: [0,0]}
@@ -129,7 +129,7 @@ class StepMo(BLE_Client):
         self._save_position()
 
 
-    def move_stepper(self, stepper_num, direction, steps, verbose = False):
+    def mvstp(self, stepper_num, direction, steps, verbose = False):
         """Move stepper with a different backlash compensation method.
         This method oversteps by a fixed amount and then corrects back to the desired position.
         
@@ -176,7 +176,7 @@ class StepMo(BLE_Client):
         return
 
 
-    def mvstp(self, stepper_num, direction, steps, verbose = False):
+    def move_stepper(self, stepper_num, direction, steps, verbose = False):
         """
         Move stepper with set backlash compensation (don't intentionally overshoot).
         Convenience method to move a specific stepper motor.

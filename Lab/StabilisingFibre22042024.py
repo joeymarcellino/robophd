@@ -101,7 +101,8 @@ def main():
         return reward
 
     # new model (comment this part out when using pretrained model)
-    env = Env_fiber_move_by_grad_reset(actuators, pds, max_actioninsteps, reset_power_fail, reset_power_goal,
+    env = Env_fiber_move_by_grad_reset(actuators, pds, max_actioninsteps,
+                                       reset_power_fail, reset_power_goal,
                                        reward_fct_2024_04_22, reward_fct_descriptor_2024_04_22, 
                                        min_power_after_reset, max_power_after_reset,
                                        max_cycles_per_episode = max_cycles_per_episode, 
@@ -116,7 +117,7 @@ def main():
                                         min_power_stop_random_actions_neutral_failure = 0.04,
                                         neutral_flailing_step_magnitude = int(200), high_power_flailing_step_magnitude = int(25),
                                         wait_time_pd = 0.1, 
-                                        time_wait_pd = 0. 5,
+                                        time_wait_pd = 0.5,
                                         number_obs_saved = 4, 
                                         timestamp = None,
                                         random_reset = True, 
@@ -133,7 +134,7 @@ def main():
     # model = CrossQ("MlpPolicy", env, tensorboard_log=env.logdir) #use this for CrossQ
     # model = SAC("MlpPolicy", env, verbose=1, tensorboard_log=env.logdir)  #use this for SAC
     num = 0
-    """
+    '''
     # load model (comment this part out when wanting fresh model)
     first_timestamp = 1714485701
     first_num = 98000
@@ -170,7 +171,7 @@ def main():
     model = TQC.load(old_model_path, tensorboard_log=log_path)
     model.set_env(env)
     model.load_replay_buffer(old_replay_path, truncate_last_traj=True)
-    """
+    '''
     # start training (for 200k training steps)
 
     TIMESTEPS = 1000
